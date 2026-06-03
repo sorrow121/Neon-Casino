@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon Nights Mobile</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=DM+Sans:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0a14; color: white; font-family: 'DM Sans', sans-serif; text-align: center; padding: 20px;}
+  .screen { display: none; flex-direction: column; height: 90vh; justify-content: center; }
+  .active { display: flex; }
+  
+  input { width: 100%; padding: 15px; margin-bottom: 15px; font-size: 1.2rem; text-align: center; background: #111; color: #00ff88; border: 2px solid #00ff88; border-radius: 10px; font-family: 'Orbitron';}
+  button { padding: 15px; font-size: 1.2rem; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-family: 'Orbitron'; margin-bottom: 10px;}
+  .btn-full { width: 100%; background: #00ff88; color: black; }
+  .btn-full:disabled { background: #333; color: #666;}
+  
+  .balance { font-size: 2.5rem; color: #f0c040; font-family: 'Orbitron'; margin-bottom: 20px; }
+  
+  .ans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;}
+  .ans-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 2rem; padding: 30px 10px;}
+  .ans-btn.selected { border-color: #00ff88; background: rgba(0,255,136,0.2); color: #00ff88;}
+  
+  .wager-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;}
+  .wager-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 1rem;}
+  .wager-btn.selected { border-color: #f0c040; background: rgba(240,192,64,0.2); color: #f0c040;}
+  
+  #errorMsg { color: #ff2d55; font-size: 0.9rem; min-height: 20px; margin-bottom: 10px;}
+</style>
+</head>
+<body>
+
+  <div id="joinScreen" class="screen active">
+    <h1 style="font-family:'Orbitron'; color:#00ff88; margin-bottom:30px;">NEON NIGHTS</h1>
+    <input type="tel" id="code" placeholder="4-DIGIT CODE" maxlength="4">
+    <input type="text" id="name" placeholder="YOUR NAME" maxlength="10">
+    <button class="btn-full" onclick="joinGame()">JOIN TABLE</button>
+    <div id="errorMsg"></div>
+  </div>
+
+  <div id="lobbyScreen" class="screen">
+    </div>
+  
+  <div id="gameOverScreen" class="screen">
+    <h1 style="color:var(--gold); font-family:'Orbitron'; font-size: 3.5rem;">GAME OVER</h1>
+    <p style="color:#888; font-size: 1.2rem; margin-top: 10px;">Look at the big screen!</p>
+    <div id="finalRankDisplay" style="font-family:'Orbitron'; color:var(--gold); font-size:1.8rem; margin-top:30px;"></div>
+  </div>
+
+  <div id="bankruptScreen" class="screen">
+    <h1 style="color:#ff2d55; font-family:'Orbitron'; font-size: 3.5rem;">ELIMINATED</h1>
+    <p style="color:#888; font-size: 1.2rem; margin-top: 10px;">You ran out of chips.</p>
+    <div id="deadRank" style="font-family:'Orbitron'; color:#f0c040; font-size:2rem; margin-top:30px;"></div>
+    <p style="color:#444; margin-top: 40px; font-weight:bold;">SPECTATOR MODE</p>
+  </div>
+
+  <div id="betScreen" class="screen">
+    <div>YOUR CHIPS</div>
+    <div class="balance" id="myBal"></div>
+    
+    <div style="text-align:left; color:#888; margin-bottom:5px;">1. Select Answer</div>
+    <div class="ans-grid" id="ansGrid">
+      <button class="ans-btn" onclick="selAns('A')">A</button>
+      <button class="ans-btn" onclick="selAns('B')">B</button>
+      <button class="ans-btn" onclick="selAns('C')">C</button>
+      <button class="ans-btn" onclick="selAns('D')">D</button>
+    </div>
+
+    <div style="text-align:left; color:#888; margin-bottom:5px;">2. Wager Amount</div>
+    <div class="wager-grid" id="wagGrid">
+      <button class="wager-btn" onclick="selWag(50)">$50</button>
+      <button class="wager-btn" onclick="selWag(100)">$100</button>
+      <button class="wager-btn" onclick="selWag(250)">$250</button>
+      <button class="wager-btn" onclick="selWag(500)">$500</button>
+      <button class="wager-btn" onclick="selWag(1000)">$1000</button>
+      <button class="wager-btn" style="color:#ff2d55; border-color:#ff2d55;" onclick="selWag('all')">ALL IN</button>
+    </div>
+
+    <div id="betError" style="color:#ff2d55; margin-bottom:10px; min-height:20px;"></div>
+    <button class="btn-full" id="confirmBtn" onclick="placeBet()" disabled>LOCK IN BET</button>
+  </div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  let myName = "";
+  let myBal = 1000;
+  let ans = null;
+  let wag = null;
+  let myRank = 0;
+
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function joinGame() {
+    const c = document.getElementById('code').value;
+    myName = document.getElementById('name').value;
+    if(c && myName) socket.emit('join', { code: c, name: myName });
+  }
+
+  socket.on('err', (msg) => document.getElementById('errorMsg').innerText = msg);
+  
+  socket.on('joined', (data) => { 
+    myBal = data.balance; 
+    // Force lobby state draw
+    document.getElementById('lobbyScreen').innerHTML = `
+        <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
+        <p style="margin-top:10px; color:#888;">You are at the table.<br>Waiting for host to deal...</p>
+    `;
+    show('lobbyScreen'); 
+  });
+
+  function selAns(val) {
+    if(navigator.vibrate) navigator.vibrate(20);
+    ans = val;
+    document.querySelectorAll('.ans-btn').forEach(b => {
+      b.classList.remove('selected');
+      if(b.innerText === val) b.classList.add('selected');
+    });
+    checkValid();
+  }
+
+  function selWag(val) {
+    if(navigator.vibrate) navigator.vibrate(20);
+    wag = val;
+    document.querySelectorAll('.wager-btn').forEach(b => {
+      b.classList.remove('selected');
+      if(b.innerText === `$${val}` || (val === 'all' && b.innerText === 'ALL IN')) b.classList.add('selected');
+    });
+    checkValid();
+  }
+
+  function checkValid() {
+    const btn = document.getElementById('confirmBtn');
+    const err = document.getElementById('betError');
+    err.innerText = "";
+    if(ans && wag) {
+      let numWag = wag === 'all' ? myBal : wag;
+      if (numWag > myBal) {
+        err.innerText = "You don't have enough chips!";
+        btn.disabled = true;
+      } else {
+        btn.disabled = false;
+        btn.innerText = `BET $${numWag} ON ${ans}`;
+      }
+    }
+  }
+
+  function placeBet() {
+    if(navigator.vibrate) navigator.vibrate([50, 50, 50]);
+    socket.emit('place_bet', { option: ans, amount: wag });
+    document.getElementById('confirmBtn').innerText = "BET LOCKED";
+    document.getElementById('confirmBtn').disabled = true;
+  }
+
+  socket.on('state', (state) => {
+    const me = state.players.find(p => p.name === myName);
+    
+    if(me) {
+      myBal = me.balance;
+      document.getElementById('myBal').innerText = "$" + myBal;
+      
+      const sorted = [...state.players].sort((a,b) => {
+          if (b.balance !== a.balance) return b.balance - a.balance;
+          return (b.eliminatedAt || 0) - (a.eliminatedAt || 0);
+      });
+      
+      myRank = sorted.findIndex(p => p.name === myName) + 1;
+      const rankText = "LEADERBOARD RANK: #" + myRank;
+      
+      document.getElementById('deadRank').innerText = rankText;
+      document.getElementById('finalRankDisplay').innerText = rankText;
+    }
+    
+    if (state.phase === 'game_over') {
+        show('gameOverScreen');
+        return;
+    }
+
+    if (me && me.balance <= 0 && !me.bet && state.phase !== 'results') {
+      show('bankruptScreen');
+      return; 
+    }
+
+    // FIX: Explictly draw the clean Lobby screen
+    if (state.phase === 'lobby') {
+      document.getElementById('lobbyScreen').innerHTML = `
+        <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
+        <p style="margin-top:10px; color:#888;">Chips reset to $1000.<br>Waiting for host to deal...</p>
+      `;
+      show('lobbyScreen');
+    } 
+    // Explictly draw the Results screen
+    else if (state.phase === 'results') {
+      show('lobbyScreen');
+      if (me && me.lastResult) {
+        document.getElementById('lobbyScreen').innerHTML = `
+          <h2 style="color:${me.lastResult.won ? '#00ff88' : '#ff2d55'}; font-size:2.5rem; font-family:'Orbitron';">
+            ${me.lastResult.won ? 'YOU WON!' : 'YOU LOST!'}
+          </h2>
+          <p style="font-size:1.5rem; margin: 15px 0;">${me.lastResult.msg}</p>
+          <div style="font-family:'Orbitron'; color:var(--gold); font-size:1.2rem; margin-top:20px;">LEADERBOARD RANK: #${myRank}</div>
+        `;
+        if(me.lastResult.won && navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
+      }
+    } 
+    else if(state.phase === 'betting') {
+      ans = null; wag = null;
+      document.querySelectorAll('.ans-btn, .wager-btn').forEach(b => b.classList.remove('selected'));
+      document.getElementById('confirmBtn').innerText = "LOCK IN BET";
+      document.getElementById('confirmBtn').disabled = true;
+      document.getElementById('betError').innerText = "";
+      show('betScreen');
+    }
+  });
+</script>
+</body>
+</html>

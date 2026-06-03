@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neon Nights Casino — Host</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Sans:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg: #030305; --card: #0a0a14; --green: #00ff88; --red: #ff2d55; --gold: #f0c040; --cyan: #00d4ff; --glow-green: 0 0 10px #00ff88, 0 0 20px #00ff88, 0 0 40px rgba(0,255,136,0.5); --glow-gold: 0 0 10px #f0c040, 0 0 20px #f0c040, 0 0 40px rgba(240,192,64,0.5); }
+  body { font-family: 'DM Sans', sans-serif; color: white; background: var(--bg); display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; background-image: linear-gradient(rgba(0,255,136,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,136,0.03) 1px, transparent 1px); background-size: 50px 50px; }
+  
+  .header { text-align: center; margin-bottom: 30px; width: 100%; }
+  h1 { font-family: 'Orbitron', monospace; font-size: 3.5rem; color: var(--green); text-shadow: var(--glow-green); margin-bottom: 10px;}
+  h1 span { color: var(--gold); text-shadow: var(--glow-gold); }
+  .room-code { display: inline-block; font-family: 'Orbitron'; font-size: 3rem; font-weight: 900; background: rgba(0,255,136,0.1); border: 2px solid var(--green); padding: 10px 30px; border-radius: 15px; box-shadow: var(--glow-green); letter-spacing: 15px;}
+  
+  .trivia-board { background: var(--card); border: 2px solid rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; width: 100%; max-width: 1000px; text-align: center; margin-bottom: 30px; }
+  .trivia-board.active { border-color: var(--cyan); box-shadow: 0 0 30px rgba(0,212,255,0.2); }
+  
+  .question { font-size: 2rem; font-weight: bold; margin-bottom: 30px; color: white; }
+  .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .option { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); padding: 20px; font-size: 1.5rem; font-weight: bold; border-radius: 10px; transition: 0.3s; }
+  .option.correct { background: rgba(0,255,136,0.2); border-color: var(--green); box-shadow: var(--glow-green); color: var(--green); }
+  .option.wrong { opacity: 0.3; }
+
+  .players-container { display: flex; flex-wrap: wrap; justify-content: center; gap: 25px; width: 100%; max-width: 1200px; margin-bottom: 80px;}
+  .player-card { position: relative; background: var(--card); border: 2px solid rgba(255,255,255,0.1); padding: 20px 25px; border-radius: 12px; text-align: center; min-width: 170px; transition: all 0.3s ease;}
+  .player-card.ready { border-color: var(--gold); box-shadow: 0 0 15px rgba(240,192,64,0.3); }
+  .player-card.dead { border-color: #222; opacity: 0.4; }
+  
+  .rank-badge { position: absolute; top: -15px; left: -15px; background: var(--gold); color: black; font-family: 'Orbitron'; font-weight: 900; font-size: 1.2rem; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid var(--bg); box-shadow: var(--glow-gold);}
+  .rank-badge.dead-badge { background: #444; box-shadow: none; color: #888; }
+
+  .p-name { font-weight: bold; font-size: 1.2rem; }
+  .p-bal { font-family: 'Orbitron'; color: var(--gold); font-size: 1.8rem; margin: 5px 0;}
+  .dead .p-bal { color: #666; }
+  .p-status { font-size: 0.9rem; color: #888; }
+  .p-status.locked { color: var(--gold); font-weight: bold;}
+  .p-status.win { color: var(--green); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
+  .p-status.lose { color: var(--red); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
+
+  #podiumScreen { display: none; width: 100%; flex-direction: column; align-items: center; margin-top: 20px; margin-bottom: 100px;}
+  .podium-spot { display: flex; flex-direction: column; align-items: center; width: 220px; }
+  .podium-name { font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; margin-bottom: 15px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
+  .podium-block { width: 100%; border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; justify-content: center; align-items: center; font-family: 'Orbitron'; font-size: 4rem; font-weight: 900; color: rgba(0,0,0,0.6); border: 2px solid; border-bottom: none;}
+  
+  .rank-1 .podium-name { color: var(--gold); text-shadow: var(--glow-gold); }
+  .rank-1 .podium-block { height: 300px; background: rgba(240,192,64,0.2); border-color: var(--gold); box-shadow: 0 -10px 40px rgba(240,192,64,0.5); }
+  
+  .rank-2 .podium-name { color: silver; text-shadow: 0 0 10px silver; }
+  .rank-2 .podium-block { height: 220px; background: rgba(192,192,192,0.2); border-color: silver; box-shadow: 0 -10px 40px rgba(192,192,192,0.3); }
+  
+  .rank-3 .podium-name { color: #cd7f32; text-shadow: 0 0 10px #cd7f32; }
+  .rank-3 .podium-block { height: 150px; background: rgba(205,127,50,0.2); border-color: #cd7f32; box-shadow: 0 -10px 40px rgba(205,127,50,0.3); }
+
+  .host-controls { position: fixed; bottom: 20px; z-index: 100;}
+  .btn { font-family: 'Orbitron'; font-weight: 900; font-size: 1.5rem; padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer; text-transform: uppercase; }
+  .btn-green { background: var(--green); color: black; box-shadow: var(--glow-green); }
+  .btn-gold { background: var(--gold); color: black; box-shadow: var(--glow-gold); }
+  .btn:disabled { background: #333; color: #666; box-shadow: none; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<div id="setup" style="margin:auto; text-align:center;">
+  <h1>NEON <span>NIGHTS</span></h1>
+  <button class="btn btn-green" style="margin-top:40px;" onclick="socket.emit('create')">OPEN CASINO</button>
+</div>
+
+<div id="main" style="display:none; width: 100%; align-items:center; flex-direction:column;">
+  <div class="header">
+    <h1>NEON <span>NIGHTS</span></h1>
+    <div class="room-code" id="roomCode"></div>
+  </div>
+
+  <div class="trivia-board" id="triviaBoard">
+    <div id="lobbyMsg" style="font-size:2rem; color:var(--cyan); font-family:'Orbitron';">WAITING FOR PLAYERS...</div>
+    <div id="qData" style="display:none;">
+      <div class="question" id="qText"></div>
+      <div class="options-grid" id="qOptions"></div>
+    </div>
+  </div>
+
+  <div class="players-container" id="playersDiv"></div>
+
+  <div id="podiumScreen">
+    <h1 style="font-size: 4.5rem; color: var(--gold); text-shadow: var(--glow-gold); margin-bottom: 40px;">FINAL STANDINGS</h1>
+    <div id="podiumGroup" style="display: flex; align-items: flex-end; justify-content: center; gap: 20px; height: 350px;"></div>
+  </div>
+
+  <div class="host-controls" id="controls"></div>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  
+  socket.on('created', ({ code }) => {
+    document.getElementById('setup').style.display = 'none';
+    document.getElementById('main').style.display = 'flex';
+    document.getElementById('roomCode').innerText = code;
+  });
+
+  socket.on('state', (state) => {
+    const board = document.getElementById('triviaBoard');
+    const lobbyMsg = document.getElementById('lobbyMsg');
+    const qData = document.getElementById('qData');
+    const pDiv = document.getElementById('playersDiv');
+    const podiumScreen = document.getElementById('podiumScreen');
+
+    const sortedPlayers = [...state.players].sort((a, b) => {
+        if (b.balance !== a.balance) return b.balance - a.balance;
+        return (b.eliminatedAt || 0) - (a.eliminatedAt || 0);
+    });
+
+    if (state.phase === 'game_over') {
+        board.style.display = 'none';
+        pDiv.style.display = 'none';
+        podiumScreen.style.display = 'flex';
+        
+        const podiumGroup = document.getElementById('podiumGroup');
+        podiumGroup.innerHTML = '';
+        
+        const top3 = sortedPlayers.slice(0, 3);
+        const displayOrder = [];
+        if (top3[1]) displayOrder.push({ p: top3[1], rank: 2 });
+        if (top3[0]) displayOrder.push({ p: top3[0], rank: 1 });
+        if (top3[2]) displayOrder.push({ p: top3[2], rank: 3 });
+
+        displayOrder.forEach(item => {
+            podiumGroup.innerHTML += `
+                <div class="podium-spot rank-${item.rank}">
+                    <div class="podium-name">${item.p.name}</div>
+                    <div class="podium-block">#${item.rank}</div>
+                </div>
+            `;
+        });
+        
+        const controls = document.getElementById('controls');
+        controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('resetGame')">PLAY AGAIN</button>`;
+        return; 
+    } else {
+        board.style.display = 'block';
+        pDiv.style.display = 'flex';
+        podiumScreen.style.display = 'none';
+    }
+
+    // FIX: Distinctly separate the Lobby view from the Game view
+    if(state.phase === 'lobby') {
+      lobbyMsg.style.display = 'block'; 
+      qData.style.display = 'none'; 
+      board.classList.remove('active');
+      
+      // If there are players, change text to VIP Lobby instead of "Waiting"
+      if (state.players.length > 0) {
+        lobbyMsg.innerHTML = `<div style="font-size:3rem; color:var(--green);">VIP LOBBY</div><div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in. Ready to start!</div>`;
+      } else {
+        lobbyMsg.innerHTML = `WAITING FOR PLAYERS...`;
+      }
+
+    } else if(state.phase === 'betting' || state.phase === 'results') {
+      lobbyMsg.style.display = 'none'; 
+      qData.style.display = 'block'; 
+      board.classList.add('active');
+      
+      document.getElementById('qText').innerText = state.currentQ.q;
+      const qOptions = document.getElementById('qOptions');
+      qOptions.innerHTML = '';
+      
+      state.currentQ.options.forEach(opt => {
+        const div = document.createElement('div');
+        div.className = 'option';
+        div.innerText = opt;
+        if(state.phase === 'results') {
+          if(opt.charAt(0) === state.currentQ.ans) div.classList.add('correct');
+          else div.classList.add('wrong');
+        }
+        qOptions.appendChild(div);
+      });
+    }
+
+    pDiv.innerHTML = '';
+    let allPlayersBet = true;
+    let activePlayerCount = 0;
+
+    sortedPlayers.forEach((p, index) => {
+      let statusHtml = `<div class="p-status">Waiting...</div>`;
+      let cardClass = "player-card";
+      let rankBadgeClass = "rank-badge";
+      let rank = index + 1;
+
+      const isDead = p.balance <= 0 && !p.bet;
+
+      if (isDead) {
+        cardClass += " dead";
+        rankBadgeClass += " dead-badge";
+        if (state.phase !== 'results' || !p.lastResult) {
+            statusHtml = `<div class="p-status lose" style="color:#666;">ELIMINATED</div>`;
+        }
+      } else {
+        activePlayerCount++;
+        if (!p.bet) allPlayersBet = false;
+      }
+
+      if(state.phase === 'betting' && p.bet) {
+        statusHtml = `<div class="p-status locked">Bet Locked!</div>`;
+        cardClass += " ready";
+      }
+      
+      if(state.phase === 'results' && p.lastResult) {
+        statusHtml = `<div class="p-status ${p.lastResult.won ? 'win' : 'lose'}">${p.lastResult.msg}</div>`;
+        if(p.lastResult.won) cardClass += " ready";
+      }
+
+      pDiv.innerHTML += `
+        <div class="${cardClass}">
+          <div class="${rankBadgeClass}">${rank}</div>
+          <div class="p-name">${p.name}</div>
+          <div class="p-bal">$${p.balance}</div>
+          ${statusHtml}
+        </div>
+      `;
+    });
+
+    if(activePlayerCount === 0) allPlayersBet = false;
+    const isGameOver = state.players.length > 1 ? activePlayerCount <= 1 : activePlayerCount === 0;
+
+    const controls = document.getElementById('controls');
+    if(state.phase === 'lobby') {
+      controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')" ${state.players.length === 0 ? 'disabled':''}>START ROUND</button>`;
+    } else if (state.phase === 'betting') {
+      controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('reveal')" ${!allPlayersBet ? 'disabled':''}>REVEAL ANSWER</button>`;
+    } else if (state.phase === 'results') {
+      if (isGameOver) {
+          controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('endGame')">SHOW PODIUM</button>`;
+      } else {
+          controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')">NEXT ROUND</button>`;
+      }
+    }
+  });
+</script>
+</body>
+</html>
