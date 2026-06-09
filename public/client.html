@@ -18,7 +18,6 @@
   
   .balance { font-size: 2.5rem; color: #f0c040; font-family: 'Orbitron'; margin-bottom: 10px; }
   
-  /* POWERUPS UI */
   .powerup-row { display: flex; gap: 10px; margin-bottom: 15px; }
   .btn-power { flex: 1; background: rgba(0,212,255,0.1); border: 2px solid var(--cyan); color: #00d4ff; font-size: 0.9rem; padding: 10px; }
   .btn-power:disabled { border-color: #333; color: #555; background: transparent; }
@@ -98,22 +97,32 @@
   const socket = io();
   let myName = "", myBal = 1000, ans = null, wag = null, myRank = 0, currentPhase = null;
 
-  // --- AUDIO ENGINE ---
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // --- CRASH-PROOF AUDIO ENGINE ---
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContext();
+
   function playTone(freq, type, dur) {
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
-    osc.stop(audioCtx.currentTime + dur);
+    try {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        
+        // Force the volume to start at 1 and drop to 0 safely
+        gain.gain.setValueAtTime(1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + dur);
+    } catch (e) {
+        console.warn("Audio disabled or blocked by browser.");
+    }
   }
 
-  // Interaction unlock for audio
   document.body.addEventListener('click', () => { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once:true});
 
   window.onload = () => {
@@ -156,7 +165,6 @@
       localStorage.removeItem('nn_name');
   });
 
-  // --- POWERUP LOGIC ---
   function use5050() {
       playTone(900, 'square', 0.1);
       socket.emit('use_5050');
@@ -167,7 +175,7 @@
       document.getElementById('btn5050').innerText = "❌ Used";
       toHide.forEach(letter => {
           document.getElementById(`ans${letter}`).disabled = true;
-          if (ans === letter) ans = null; // Unselect if they had the wrong one picked
+          if (ans === letter) ans = null; 
       });
       checkValid();
   });
@@ -286,7 +294,6 @@
           <div style="font-family:'Orbitron'; color:var(--gold); font-size:1.2rem; margin-top:20px;">LEADERBOARD RANK: #${myRank}</div>
         `;
         
-        // Play Win/Lose Sound
         if(me.lastResult.won) {
             playTone(600, 'sine', 0.2); setTimeout(()=>playTone(800, 'sine', 0.4), 200);
             if(navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
@@ -307,14 +314,13 @@
           document.getElementById('confirmBtn').disabled = true;
           document.getElementById('betError').innerText = "";
           
-          // Set Powerup Buttons
           const btn50 = document.getElementById('btn5050');
           const btnPk = document.getElementById('btnPeek');
           
           if(me.powerups.fifty > 0) { btn50.disabled = false; btn50.innerText = "💡 50/50"; }
           else { btn50.disabled = true; btn50.innerText = "❌ Used"; }
           
-          if(me.powerups.peek > 0) { btnPk.disabled = false; btnPk.innerText = "👁️ Peek"; }
+          if(me.powerups.peek > 0) { btnPk.disabled = false; btnPk.innerText = "🔍 Peek"; }
           else { btnPk.disabled = true; btnPk.innerText = "❌ Used"; }
       }
       if (me && me.bet) {
