@@ -40,6 +40,10 @@
   .p-status.win { color: var(--green); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
   .p-status.lose { color: var(--red); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
 
+  /* FIX: Sleek Neon Kick Button Styling */
+  .btn-kick { background: rgba(255, 45, 85, 0.15); border: 1px solid var(--red); color: var(--red); font-family: 'Orbitron'; font-size: 0.75rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; cursor: pointer; margin-top: 10px; display: inline-block; transition: 0.2s; }
+  .btn-kick:hover { background: var(--red); color: black; box-shadow: 0 0 12px #ff2d55; }
+
   #podiumScreen { display: none; width: 100%; flex-direction: column; align-items: center; margin-top: 20px; margin-bottom: 100px;}
   .podium-spot { display: flex; flex-direction: column; align-items: center; width: 220px; }
   .podium-name { font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; margin-bottom: 15px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
@@ -104,7 +108,6 @@
     document.getElementById('roomCode').innerText = code;
   });
 
-  // Global function to start round and send settings
   window.startRoundWithSettings = function() {
     const input = document.getElementById('maxRoundsInput');
     const maxRounds = input ? input.value : 5;
@@ -161,7 +164,6 @@
       board.classList.remove('active');
       
       if (state.players.length > 0) {
-        // FIX: Add Lobby Settings!
         let settingsHtml = '';
         if (state.round === 0) {
             settingsHtml = `
@@ -230,25 +232,27 @@
         if(p.lastResult.won) cardClass += " ready";
       }
 
+      // FIX: Append Kick Controls dynamically if in lobby
+      let kickBtnHtml = '';
+      if (state.phase === 'lobby') {
+          kickBtnHtml = `<br><button class="btn-kick" onclick="socket.emit('kick_player', { pId: '${p.id}' })">KICK</button>`;
+      }
+
       pDiv.innerHTML += `
         <div class="${cardClass}">
           <div class="${rankBadgeClass}">${rank}</div>
           <div class="p-name">${p.name}</div>
           <div class="p-bal">$${p.balance}</div>
           ${statusHtml}
+          ${kickBtnHtml}
         </div>
       `;
     });
 
-    // FIX: If everyone dies, don't get stuck! Allow the host to reveal the final nail in the coffin.
     if(activePlayerCount === 0) allPlayersBet = true; 
-
-    // FIX: Trigger Game Over if someone is the last one standing, OR if you hit the max rounds!
     const isGameOver = (state.players.length > 1 ? activePlayerCount <= 1 : activePlayerCount === 0) || state.round >= state.maxRounds;
 
     const controls = document.getElementById('controls');
-    
-    // Always add the emergency "FORCE END" button just in case
     let forceEndBtn = '';
     if (state.phase !== 'lobby' && state.phase !== 'game_over') {
         forceEndBtn = `<button class="btn btn-red" onclick="socket.emit('endGame')">FORCE END</button>`;
