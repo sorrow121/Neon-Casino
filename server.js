@@ -14,7 +14,6 @@ const rooms = {};
 // 🧠 MASSIVE QUESTION DATABASE (80% Finance / 20% Random)
 // ==========================================
 const customDatabase = [
-    // --- FINANCIAL BLOCKCHAIN (40 Questions) ---
     { q: "What is the primary benefit of a 'Smart Contract' in finance?", correct: "Automated self-execution of agreements", incorrect: ["Customer service live chat", "Physical document storage", "Printing paper money"] },
     { q: "What does 'DeFi' stand for in the blockchain space?", correct: "Decentralized Finance", incorrect: ["Digital Exchange Fiat", "Derivative Financial Instrument", "Decrypted File Interface"] },
     { q: "Which consensus mechanism is considered more energy-efficient?", correct: "Proof of Stake (PoS)", incorrect: ["Proof of Work (PoW)", "Proof of Print (PoP)", "Proof of Vault (PoV)"] },
@@ -69,7 +68,6 @@ const customDatabase = [
     { q: "How many folds are in a traditional chef's hat (toque)?", correct: "100", incorrect: ["10", "50", "365"] }
 ];
 
-// Automatically grabs a question, shuffles the answers, and assigns A, B, C, D
 function getCustomQuestion() {
     const qData = customDatabase[Math.floor(Math.random() * customDatabase.length)];
     const allOptions = [qData.correct, ...qData.incorrect];
@@ -85,15 +83,9 @@ function getCustomQuestion() {
             finalAnswerLetter = labels[i];
         }
     }
-
     return { q: qData.q, options: finalOptions, ans: finalAnswerLetter };
 }
 
-// ==========================================
-// ⚙️ GAME ENGINE LOGIC
-// ==========================================
-
-// Automatically redirect the base URL to the phone controller
 app.get('/', (req, res) => {
     res.redirect('/client.html');
 });
@@ -102,16 +94,41 @@ io.on('connection', (socket) => {
   
   socket.on('create', () => {
     const code = Math.floor(1000 + Math.random() * 9000).toString(); 
-    rooms[code] = { code, players: [], phase: 'lobby', round: 0, currentQ: null, maxRounds: 5 };
+    rooms[code] = { code, hostSocketId: socket.id, players: [], phase: 'lobby', round: 0, currentQ: null, maxRounds: 5 };
     socket.join(code);
     socket.emit('created', { code });
     io.to(code).emit('state', rooms[code]);
   });
 
+  // FIX: Handles joining, mid-game locks, and refresh re-connections
   socket.on('join', ({ code, name }) => {
     const room = rooms[code];
     if (!room) return socket.emit('err', 'Invalid Room Code');
-    if(room.players.some(p => p.name === name)) return socket.emit('err', 'Name taken');
+
+    // Look if user already exists (for page refresh persistence)
+    const existingPlayer = room.players.find(p => p.name === name);
+
+    if (room.phase !== 'lobby') {
+        if (existingPlayer) {
+            // Takeover old seat
+            existingPlayer.id = socket.id;
+            socket.join(code);
+            socket.emit('joined', { name: existingPlayer.name, balance: existingPlayer.balance });
+            io.to(code).emit('state', room);
+            return;
+        } else {
+            // Block completely new entries
+            return socket.emit('err', 'Game already in progress');
+        }
+    }
+
+    if (existingPlayer) {
+        existingPlayer.id = socket.id;
+        socket.join(code);
+        socket.emit('joined', { name: existingPlayer.name, balance: existingPlayer.balance });
+        io.to(code).emit('state', room);
+        return;
+    }
 
     const newPlayer = { id: socket.id, name, balance: 1000, bet: null, lastResult: null, eliminatedAt: null };
     room.players.push(newPlayer);
@@ -119,6 +136,21 @@ io.on('connection', (socket) => {
     
     socket.emit('joined', { name, balance: 1000 });
     io.to(code).emit('state', room);
+  });
+
+  // FIX: Kick Player Core Logic
+  socket.on('kick_player', ({ pId }) => {
+    const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
+    if (roomCode && rooms[roomCode]) {
+        const room = rooms[roomCode];
+        const pIndex = room.players.findIndex(p => p.id === pId);
+        if (pIndex !== -1) {
+            const targetSocketId = room.players[pIndex].id;
+            room.players.splice(pIndex, 1);
+            io.to(targetSocketId).emit('kicked'); // Tell mobile phone they are out
+            io.to(roomCode).emit('state', room);
+        }
+    }
   });
 
   socket.on('place_bet', (betData) => {
@@ -142,10 +174,7 @@ io.on('connection', (socket) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
         const room = rooms[roomCode];
-        
-        if (settings && settings.maxRounds) {
-            room.maxRounds = parseInt(settings.maxRounds);
-        }
+        if (settings && settings.maxRounds) room.maxRounds = parseInt(settings.maxRounds);
 
         room.round++;
         room.currentQ = getCustomQuestion();
