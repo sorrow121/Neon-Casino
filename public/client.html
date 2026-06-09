@@ -12,7 +12,7 @@
   .active { display: flex; }
   
   input { width: 100%; padding: 15px; margin-bottom: 15px; font-size: 1.2rem; text-align: center; background: #111; color: #00ff88; border: 2px solid #00ff88; border-radius: 10px; font-family: 'Orbitron';}
-  button { padding: 15px; font-size: 1.2rem; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-family: 'Orbitron'; margin-bottom: 10px;}
+  button { padding: 15px; font-size: 1.2rem; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; font-family: 'Orbitron'; margin-bottom: 10px; transition: 0.2s;}
   .btn-full { width: 100%; background: #00ff88; color: black; }
   .btn-full:disabled { background: #333; color: #666;}
   
@@ -20,13 +20,16 @@
   
   .ans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;}
   .ans-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 2rem; padding: 30px 10px;}
-  .ans-btn.selected { border-color: #00ff88; background: rgba(0,255,136,0.2); color: #00ff88;}
+  .ans-btn.selected { border-color: #00ff88; background: rgba(0,255,136,0.2); color: #00ff88; box-shadow: 0 0 15px rgba(0,255,136,0.4);}
   
-  .wager-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;}
+  .wager-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;}
   .wager-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 1rem;}
-  .wager-btn.selected { border-color: #f0c040; background: rgba(240,192,64,0.2); color: #f0c040;}
+  .wager-btn.selected { border-color: #f0c040; background: rgba(240,192,64,0.2); color: #f0c040; box-shadow: 0 0 15px rgba(240,192,64,0.4);}
   
   #errorMsg { color: #ff2d55; font-size: 0.9rem; min-height: 20px; margin-bottom: 10px;}
+
+  .custom-input { width: 100%; padding: 15px; margin-bottom: 20px; font-size: 1.2rem; text-align: center; background: #1a1a2e; color: #00d4ff; border: 2px solid #333; border-radius: 10px; font-family: 'Orbitron'; outline: none;}
+  .custom-input:focus { border-color: #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.4);}
 </style>
 </head>
 <body>
@@ -76,6 +79,7 @@
       <button class="wager-btn" onclick="selWag(1000)">$1000</button>
       <button class="wager-btn" style="color:#ff2d55; border-color:#ff2d55;" onclick="selWag('all')">ALL IN</button>
     </div>
+    <input type="number" id="customWag" class="custom-input" placeholder="Or Enter Custom $" oninput="selCustomWag()">
 
     <div id="betError" style="color:#ff2d55; margin-bottom:10px; min-height:20px;"></div>
     <button class="btn-full" id="confirmBtn" onclick="placeBet()" disabled>LOCK IN BET</button>
@@ -89,6 +93,9 @@
   let ans = null;
   let wag = null;
   let myRank = 0;
+  
+  // FIX: Keep track of the current phase so we don't accidentally erase bets
+  let currentPhase = null; 
 
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -105,7 +112,6 @@
   
   socket.on('joined', (data) => { 
     myBal = data.balance; 
-    // Force lobby state draw
     document.getElementById('lobbyScreen').innerHTML = `
         <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
         <p style="margin-top:10px; color:#888;">You are at the table.<br>Waiting for host to deal...</p>
@@ -123,9 +129,24 @@
     checkValid();
   }
 
+  // FIX: Custom Wager Function
+  function selCustomWag() {
+    const val = parseInt(document.getElementById('customWag').value);
+    if (!isNaN(val) && val > 0) {
+        wag = val;
+        // Clear highlighted buttons if custom is used
+        document.querySelectorAll('.wager-btn').forEach(b => b.classList.remove('selected'));
+        checkValid();
+    } else {
+        wag = null;
+        checkValid();
+    }
+  }
+
   function selWag(val) {
     if(navigator.vibrate) navigator.vibrate(20);
     wag = val;
+    document.getElementById('customWag').value = ''; // Clear custom input box
     document.querySelectorAll('.wager-btn').forEach(b => {
       b.classList.remove('selected');
       if(b.innerText === `$${val}` || (val === 'all' && b.innerText === 'ALL IN')) b.classList.add('selected');
@@ -146,6 +167,9 @@
         btn.disabled = false;
         btn.innerText = `BET $${numWag} ON ${ans}`;
       }
+    } else {
+      btn.disabled = true;
+      btn.innerText = "LOCK IN BET";
     }
   }
 
@@ -170,30 +194,29 @@
       
       myRank = sorted.findIndex(p => p.name === myName) + 1;
       const rankText = "LEADERBOARD RANK: #" + myRank;
-      
       document.getElementById('deadRank').innerText = rankText;
       document.getElementById('finalRankDisplay').innerText = rankText;
     }
     
     if (state.phase === 'game_over') {
         show('gameOverScreen');
+        currentPhase = state.phase;
         return;
     }
 
     if (me && me.balance <= 0 && !me.bet && state.phase !== 'results') {
       show('bankruptScreen');
+      currentPhase = state.phase;
       return; 
     }
 
-    // FIX: Explictly draw the clean Lobby screen
     if (state.phase === 'lobby') {
       document.getElementById('lobbyScreen').innerHTML = `
         <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
-        <p style="margin-top:10px; color:#888;">Chips reset to $1000.<br>Waiting for host to deal...</p>
+        <p style="margin-top:10px; color:#888;">Waiting for host to deal...</p>
       `;
       show('lobbyScreen');
     } 
-    // Explictly draw the Results screen
     else if (state.phase === 'results') {
       show('lobbyScreen');
       if (me && me.lastResult) {
@@ -208,13 +231,24 @@
       }
     } 
     else if(state.phase === 'betting') {
-      ans = null; wag = null;
-      document.querySelectorAll('.ans-btn, .wager-btn').forEach(b => b.classList.remove('selected'));
-      document.getElementById('confirmBtn').innerText = "LOCK IN BET";
-      document.getElementById('confirmBtn').disabled = true;
-      document.getElementById('betError').innerText = "";
+      // FIX: Only erase the screen if this is the FIRST time we are entering the betting phase this round
+      if (currentPhase !== 'betting') {
+          ans = null; wag = null;
+          document.getElementById('customWag').value = '';
+          document.querySelectorAll('.ans-btn, .wager-btn').forEach(b => b.classList.remove('selected'));
+          document.getElementById('confirmBtn').innerText = "LOCK IN BET";
+          document.getElementById('confirmBtn').disabled = true;
+          document.getElementById('betError').innerText = "";
+      }
+      // If you specifically already locked in your bet, keep the button disabled
+      if (me && me.bet) {
+          document.getElementById('confirmBtn').innerText = "BET LOCKED";
+          document.getElementById('confirmBtn').disabled = true;
+      }
       show('betScreen');
     }
+    
+    currentPhase = state.phase; // Update memory
   });
 </script>
 </body>
