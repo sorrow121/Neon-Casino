@@ -6,13 +6,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Serve files from the public folder
 app.use(express.static('public'));
-
-// Store active games
 const rooms = {};
 
-// Automatically redirect the base URL to the phone controller
 app.get('/', (req, res) => {
     res.redirect('/client.html');
 });
@@ -209,7 +205,6 @@ const customDatabase = [
     { cat: "trivia", q: "What is the currency of Japan?", correct: "Yen", incorrect: ["Won", "Yuan", "Ringgit"] }
 ];
 
-// Helper function to grab a random question and shuffle the answers
 function getCustomQuestion(category) {
     let pool = customDatabase;
     if (category !== "mixed") {
@@ -219,8 +214,6 @@ function getCustomQuestion(category) {
 
     const qData = pool[Math.floor(Math.random() * pool.length)];
     const allOptions = [qData.correct, ...qData.incorrect];
-    
-    // Shuffle the answers
     allOptions.sort(() => Math.random() - 0.5); 
 
     const labels = ['A', 'B', 'C', 'D'];
@@ -236,13 +229,8 @@ function getCustomQuestion(category) {
     return { q: qData.q, options: finalOptions, ans: finalAnswerLetter };
 }
 
-// ==========================================
-// ⚙️ GAME ENGINE LOGIC & SOCKET.IO
-// ==========================================
-
 io.on('connection', (socket) => {
   
-  // 1. Host creates a room
   socket.on('create', () => {
     const code = Math.floor(1000 + Math.random() * 9000).toString(); 
     rooms[code] = { code, hostSocketId: socket.id, players: [], phase: 'lobby', round: 0, currentQ: null, maxRounds: 5, category: 'mixed' };
@@ -251,7 +239,6 @@ io.on('connection', (socket) => {
     io.to(code).emit('state', rooms[code]);
   });
 
-  // 2. Host reloads page and reconnects to room
   socket.on('reclaim_host', ({ code }) => {
     if (rooms[code]) {
         rooms[code].hostSocketId = socket.id;
@@ -263,7 +250,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 3. Host manually destroys room
   socket.on('close_room', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -273,14 +259,12 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 4. Player joins room (handles refresh takeover too)
   socket.on('join', ({ code, name }) => {
     const room = rooms[code];
     if (!room) return socket.emit('err', 'Invalid Room Code');
 
     const existingPlayer = room.players.find(p => p.name === name);
 
-    // If game started, only allow reconnects, block new players
     if (room.phase !== 'lobby') {
         if (existingPlayer) {
             existingPlayer.id = socket.id;
@@ -299,7 +283,6 @@ io.on('connection', (socket) => {
         return;
     }
 
-    // Add brand new player with powerups and stats trackers
     const newPlayer = { 
         id: socket.id, name, balance: 1000, bet: null, lastResult: null, 
         eliminatedAt: null, totalBet: 0, totalWon: 0, 
@@ -311,7 +294,6 @@ io.on('connection', (socket) => {
     io.to(code).emit('state', room);
   });
 
-  // 5. Host kicks a player
   socket.on('kick_player', ({ pId }) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if (roomCode && rooms[roomCode]) {
@@ -326,48 +308,39 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 6. Player uses 50/50 Powerup
   socket.on('use_5050', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
         const room = rooms[roomCode];
         const player = room.players.find(p => p.id === socket.id);
-        if(player && player.powerups.fifty > 0 && room.phase === 'betting') {
-            player.powerups.fifty -= 1; // deduct powerup
+        
+        // SAFE CHECK: Ensure powerups object exists
+        if(player && player.powerups && player.powerups.fifty > 0 && room.phase === 'betting') {
+            player.powerups.fifty -= 1;
             const correctAns = room.currentQ.ans;
             const wrongOptions = ['A','B','C','D'].filter(l => l !== correctAns);
             wrongOptions.sort(() => Math.random() - 0.5);
             const toHide = [wrongOptions[0], wrongOptions[1]];
-            socket.emit('5050_result', toHide); // Send hidden letters back to phone
+            socket.emit('5050_result', toHide);
             io.to(roomCode).emit('state', room); 
         }
     }
   });
 
-  // 7. Player uses Peek Powerup
   socket.on('use_peek', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
         const room = rooms[roomCode];
         const player = room.players.find(p => p.id === socket.id);
-        if(player && player.powerups.peek > 0 && room.phase === 'betting') {
-            player.powerups.peek -= 1; // deduct powerup
-            const topPlayers = [...room.players]
-                .filter(p => p.id !== socket.id)
-                .sort((a,b) => b.balance - a.balance)
-                .slice(0, 3);
-            
-            const peekData = topPlayers.map(p => {
-                return { name: p.name, bet: p.bet ? p.bet.option : "Thinking..." };
-            });
-
-            socket.emit('peek_result', peekData); // Send top 3 info back to phone
+        
+        // SAFE CHECK: Removed the peek_result emit entirely! Just broadcast the state.
+        if(player && player.powerups && player.powerups.peek > 0 && room.phase === 'betting') {
+            player.powerups.peek -= 1; 
             io.to(roomCode).emit('state', room);
         }
     }
   });
 
-  // 8. Player places bet
   socket.on('place_bet', (betData) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -386,7 +359,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 9. Host starts the round
   socket.on('startRound', (settings) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -402,7 +374,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 10. Host reveals answer and pays winners
   socket.on('reveal', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -428,7 +399,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 11. Trigger Podium
   socket.on('endGame', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -437,7 +407,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 12. Play again (reset room data)
   socket.on('resetGame', () => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -454,7 +423,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start listening for internet traffic!
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🎰 Casino Server is live and running on port ${PORT}`);
