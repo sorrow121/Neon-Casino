@@ -115,19 +115,29 @@
   const socket = io();
   let currentPhaseMem = null;
 
-  // --- AUDIO SYNTHESIZER ---
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // --- CRASH-PROOF AUDIO ENGINE ---
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioContext();
+
   function playTone(freq, type, dur) {
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.start();
-    gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
-    osc.stop(audioCtx.currentTime + dur);
+    try {
+        if(audioCtx.state === 'suspended') audioCtx.resume();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        
+        gain.gain.setValueAtTime(1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+        
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(audioCtx.currentTime);
+        osc.stop(audioCtx.currentTime + dur);
+    } catch (e) {
+        console.warn("Audio disabled or blocked by browser.");
+    }
   }
   
   window.onload = () => {
@@ -160,7 +170,6 @@
   }
 
   socket.on('state', (state) => {
-    // Play sounds on phase change
     if(currentPhaseMem !== state.phase) {
         if(state.phase === 'betting') { playTone(400, 'square', 0.1); setTimeout(()=>playTone(600, 'square', 0.2), 150); }
         if(state.phase === 'results') playTone(800, 'sine', 0.5);
