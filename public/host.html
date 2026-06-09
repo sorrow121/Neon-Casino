@@ -115,7 +115,6 @@
   const socket = io();
   let currentPhaseMem = null;
 
-  // --- CRASH-PROOF AUDIO ENGINE ---
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const audioCtx = new AudioContext();
 
@@ -136,7 +135,7 @@
         osc.start(audioCtx.currentTime);
         osc.stop(audioCtx.currentTime + dur);
     } catch (e) {
-        console.warn("Audio disabled or blocked by browser.");
+        console.warn("Audio disabled");
     }
   }
   
@@ -311,8 +310,9 @@
 
       let pUps = '';
       if(state.phase === 'betting') {
-          if(p.powerups.fifty === 0) pUps += ' 💡';
-          if(p.powerups.peek === 0) pUps += ' 👁️';
+          // 🛡️ THE FIX: Safe Null Checking added here to prevent the crash!
+          if(p.powerups && p.powerups.fifty === 0) pUps += ' 💡';
+          if(p.powerups && p.powerups.peek === 0) pUps += ' 👁️';
       }
 
       let kickBtnHtml = '';
