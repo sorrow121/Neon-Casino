@@ -18,12 +18,13 @@
   .trivia-board { background: var(--card); border: 2px solid rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; width: 100%; max-width: 1000px; text-align: center; margin-bottom: 30px; }
   .trivia-board.active { border-color: var(--cyan); box-shadow: 0 0 30px rgba(0,212,255,0.2); }
   
-  /* FIX 3: Rules Box Styling */
   .lobby-flex { display: flex; justify-content: center; gap: 40px; align-items: stretch; margin-top: 20px;}
   .rules-box { border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.4); padding: 20px; border-radius: 15px; text-align: left; max-width: 350px;}
   .rules-box h3 { color: var(--cyan); font-family: 'Orbitron'; margin-bottom: 10px; font-size: 1.2rem;}
   .rules-box p { color: #aaa; font-size: 0.95rem; margin-bottom: 8px; line-height: 1.4;}
   .rules-box strong { color: var(--gold); }
+
+  .settings-input { background: #111; color: var(--green); border: 2px solid var(--green); padding: 8px; border-radius: 5px; font-family: 'Orbitron'; font-size: 1rem; margin-top: 5px; width: 100%; outline:none;}
 
   .question { font-size: 2rem; font-weight: bold; margin-bottom: 30px; color: white; }
   .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -55,7 +56,6 @@
   .podium-name { font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; margin-bottom: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
   .podium-block { width: 100%; border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; justify-content: center; align-items: center; font-family: 'Orbitron'; font-size: 4rem; font-weight: 900; color: rgba(0,0,0,0.6); border: 2px solid; border-bottom: none;}
   
-  /* FIX 1: Podium Stat Blocks */
   .podium-stats { margin-top: 15px; font-family: 'DM Sans'; font-size: 0.9rem; color: #aaa; text-align: center; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%;}
   .podium-stats span { font-family: 'Orbitron'; font-weight: bold; }
   .stat-won { color: var(--green); }
@@ -92,7 +92,8 @@
   </div>
 
   <div class="trivia-board" id="triviaBoard">
-    <div id="lobbyMsg"></div> <div id="qData" style="display:none;">
+    <div id="lobbyMsg"></div>
+    <div id="qData" style="display:none;">
       <h3 style="color:var(--gold); margin-bottom:10px;" id="roundDisplay">ROUND 1</h3>
       <div class="question" id="qText"></div>
       <div class="options-grid" id="qOptions"></div>
@@ -112,13 +113,26 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
+  let currentPhaseMem = null;
+
+  // --- AUDIO SYNTHESIZER ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playTone(freq, type, dur) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  }
   
-  // FIX 2: Host Auto-Recovery on Refresh
   window.onload = () => {
     const savedCode = localStorage.getItem('nn_host_code');
-    if (savedCode) {
-        socket.emit('reclaim_host', { code: savedCode });
-    }
+    if (savedCode) socket.emit('reclaim_host', { code: savedCode });
   };
 
   socket.on('err', (msg) => {
@@ -137,12 +151,23 @@
   });
 
   window.startRoundWithSettings = function() {
-    const input = document.getElementById('maxRoundsInput');
-    const maxRounds = input ? input.value : 5;
-    socket.emit('startRound', { maxRounds: maxRounds });
+    const rInput = document.getElementById('maxRoundsInput');
+    const cInput = document.getElementById('catInput');
+    socket.emit('startRound', { 
+        maxRounds: rInput ? rInput.value : 5,
+        category: cInput ? cInput.value : 'mixed'
+    });
   }
 
   socket.on('state', (state) => {
+    // Play sounds on phase change
+    if(currentPhaseMem !== state.phase) {
+        if(state.phase === 'betting') { playTone(400, 'square', 0.1); setTimeout(()=>playTone(600, 'square', 0.2), 150); }
+        if(state.phase === 'results') playTone(800, 'sine', 0.5);
+        if(state.phase === 'game_over') playTone(300, 'sawtooth', 1.0);
+    }
+    currentPhaseMem = state.phase;
+
     const board = document.getElementById('triviaBoard');
     const lobbyMsg = document.getElementById('lobbyMsg');
     const qData = document.getElementById('qData');
@@ -155,10 +180,7 @@
     });
 
     if (state.phase === 'game_over') {
-        board.style.display = 'none';
-        pDiv.style.display = 'none';
-        podiumScreen.style.display = 'flex';
-        
+        board.style.display = 'none'; pDiv.style.display = 'none'; podiumScreen.style.display = 'flex';
         const podiumGroup = document.getElementById('podiumGroup');
         podiumGroup.innerHTML = '';
         
@@ -169,7 +191,6 @@
         if (top3[2]) displayOrder.push({ p: top3[2], rank: 3 });
 
         displayOrder.forEach(item => {
-            // FIX 1: Detailed Podium Stats injected here
             podiumGroup.innerHTML += `
                 <div class="podium-spot rank-${item.rank}">
                     <div class="podium-name">${item.p.name}</div>
@@ -182,44 +203,52 @@
             `;
         });
         
-        const controls = document.getElementById('controls');
-        controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('resetGame')">PLAY AGAIN</button>`;
+        document.getElementById('controls').innerHTML = `
+            <button class="btn btn-green" onclick="socket.emit('resetGame')">PLAY AGAIN</button>
+            <button class="btn btn-red" onclick="socket.emit('close_room')">SHUT DOWN ROOM</button>
+        `;
         return; 
     } else {
-        board.style.display = 'block';
-        pDiv.style.display = 'flex';
-        podiumScreen.style.display = 'none';
+        board.style.display = 'block'; pDiv.style.display = 'flex'; podiumScreen.style.display = 'none';
     }
 
     if(state.phase === 'lobby') {
-      lobbyMsg.style.display = 'block'; 
-      qData.style.display = 'none'; 
-      board.classList.remove('active');
+      lobbyMsg.style.display = 'block'; qData.style.display = 'none'; board.classList.remove('active');
       
       if (state.players.length > 0) {
         let settingsHtml = '';
         if (state.round === 0) {
             settingsHtml = `
-            <div style="margin-top:20px; background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; display:inline-block;">
-                <label style="color:var(--gold); font-family:'Orbitron'; font-size:1.2rem;">TOTAL ROUNDS: </label>
-                <input type="number" id="maxRoundsInput" value="5" min="1" max="20" style="font-size:1.2rem; width:60px; text-align:center; background:#111; color:var(--green); border:2px solid var(--green); border-radius:5px; font-family:'Orbitron';">
+            <div style="margin-top:20px; background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; display:flex; flex-direction:column; gap:10px;">
+                <div>
+                    <label style="color:var(--gold); font-family:'Orbitron'; font-size:1rem;">CATEGORY: </label><br>
+                    <select id="catInput" class="settings-input">
+                        <option value="mixed">Mixed (All)</option>
+                        <option value="blockchain">Financial Blockchain</option>
+                        <option value="gaming">Video Games</option>
+                        <option value="trivia">Fun Trivia</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="color:var(--gold); font-family:'Orbitron'; font-size:1rem;">TOTAL ROUNDS: </label>
+                    <input type="number" id="maxRoundsInput" value="5" min="1" max="20" class="settings-input" style="width:80px; display:inline-block; margin-left:10px;">
+                </div>
             </div>`;
         }
         
-        // FIX 3: Injection of the sleek Rules Side-Panel
         lobbyMsg.innerHTML = `
             <div style="font-size:3rem; color:var(--green); font-family:'Orbitron';">VIP LOBBY</div>
             <div class="lobby-flex">
                 <div style="flex: 1;">
-                    <div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in.<br>Ready to start!</div>
+                    <div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in. Ready to deal.</div>
                     ${settingsHtml}
                 </div>
                 <div class="rules-box">
                     <h3>HOW TO PLAY</h3>
                     <p><strong>1.</strong> Read the question on the big screen.</p>
-                    <p><strong>2.</strong> Choose A, B, C, or D on your phone and place your bet.</p>
-                    <p><strong>3.</strong> Correct answers <strong>DOUBLE</strong> your bet! Wrong answers lose it.</p>
-                    <p><strong>4.</strong> Hit $0 and you are eliminated. The highest balance at the end wins.</p>
+                    <p><strong>2.</strong> Choose A, B, C, or D and place your bet.</p>
+                    <p><strong>3.</strong> Correct answers <strong>DOUBLE</strong> your bet!</p>
+                    <p><strong>4.</strong> Use your two <strong>POWER-UPS</strong> wisely. (Once per game!)</p>
                 </div>
             </div>
         `;
@@ -228,10 +257,7 @@
       }
 
     } else if(state.phase === 'betting' || state.phase === 'results') {
-      lobbyMsg.style.display = 'none'; 
-      qData.style.display = 'block'; 
-      board.classList.add('active');
-      
+      lobbyMsg.style.display = 'none'; qData.style.display = 'block'; board.classList.add('active');
       document.getElementById('roundDisplay').innerText = `ROUND ${state.round} OF ${state.maxRounds}`;
       document.getElementById('qText').innerText = state.currentQ.q;
       const qOptions = document.getElementById('qOptions');
@@ -258,41 +284,37 @@
       let cardClass = "player-card";
       let rankBadgeClass = "rank-badge";
       let rank = index + 1;
-
       const isDead = p.balance <= 0 && !p.bet;
 
       if (isDead) {
-        cardClass += " dead";
-        rankBadgeClass += " dead-badge";
-        if (state.phase !== 'results' || !p.lastResult) {
-            statusHtml = `<div class="p-status lose" style="color:#666;">ELIMINATED</div>`;
-        }
+        cardClass += " dead"; rankBadgeClass += " dead-badge";
+        if (state.phase !== 'results' || !p.lastResult) statusHtml = `<div class="p-status lose" style="color:#666;">ELIMINATED</div>`;
       } else {
         activePlayerCount++;
         if (!p.bet) allPlayersBet = false;
       }
 
-      if(state.phase === 'betting' && p.bet) {
-        statusHtml = `<div class="p-status locked">Bet Locked!</div>`;
-        cardClass += " ready";
-      }
-      
+      if(state.phase === 'betting' && p.bet) { statusHtml = `<div class="p-status locked">Bet Locked!</div>`; cardClass += " ready"; }
       if(state.phase === 'results' && p.lastResult) {
         statusHtml = `<div class="p-status ${p.lastResult.won ? 'win' : 'lose'}">${p.lastResult.msg}</div>`;
         if(p.lastResult.won) cardClass += " ready";
       }
 
-      let kickBtnHtml = '';
-      if (state.phase === 'lobby') {
-          kickBtnHtml = `<br><button class="btn-kick" onclick="socket.emit('kick_player', { pId: '${p.id}' })">KICK</button>`;
+      let pUps = '';
+      if(state.phase === 'betting') {
+          if(p.powerups.fifty === 0) pUps += ' 💡';
+          if(p.powerups.peek === 0) pUps += ' 👁️';
       }
+
+      let kickBtnHtml = '';
+      if (state.phase === 'lobby') kickBtnHtml = `<br><button class="btn-kick" onclick="socket.emit('kick_player', { pId: '${p.id}' })">KICK</button>`;
 
       pDiv.innerHTML += `
         <div class="${cardClass}">
           <div class="${rankBadgeClass}">${rank}</div>
           <div class="p-name">${p.name}</div>
           <div class="p-bal">$${p.balance}</div>
-          ${statusHtml}
+          ${statusHtml} <span style="font-size:0.8rem;">${pUps}</span>
           ${kickBtnHtml}
         </div>
       `;
@@ -312,11 +334,8 @@
     } else if (state.phase === 'betting') {
       controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('reveal')" ${!allPlayersBet ? 'disabled':''}>REVEAL ANSWER</button>` + forceEndBtn;
     } else if (state.phase === 'results') {
-      if (isGameOver) {
-          controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('endGame')">SHOW PODIUM</button>`;
-      } else {
-          controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')">NEXT ROUND</button>` + forceEndBtn;
-      }
+      if (isGameOver) controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('endGame')">SHOW PODIUM</button>`;
+      else controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')">NEXT ROUND</button>` + forceEndBtn;
     }
   });
 </script>
