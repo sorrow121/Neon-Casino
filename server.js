@@ -10,10 +10,8 @@ app.use(express.static('public'));
 
 const rooms = {};
 
-// ==========================================
-// 🧠 MASSIVE QUESTION DATABASE (80% Finance / 20% Random)
-// ==========================================
 const customDatabase = [
+    // --- FINANCIAL BLOCKCHAIN ---
     { q: "What is the primary benefit of a 'Smart Contract' in finance?", correct: "Automated self-execution of agreements", incorrect: ["Customer service live chat", "Physical document storage", "Printing paper money"] },
     { q: "What does 'DeFi' stand for in the blockchain space?", correct: "Decentralized Finance", incorrect: ["Digital Exchange Fiat", "Derivative Financial Instrument", "Decrypted File Interface"] },
     { q: "Which consensus mechanism is considered more energy-efficient?", correct: "Proof of Stake (PoS)", incorrect: ["Proof of Work (PoW)", "Proof of Print (PoP)", "Proof of Vault (PoV)"] },
@@ -55,7 +53,7 @@ const customDatabase = [
     { q: "What is a 'Sybil Attack'?", correct: "One entity creating multiple fake identities to gain network influence", incorrect: ["A physical attack on a server farm", "Guessing a password millions of times per second", "Stealing funds from an unprotected liquidity pool"] },
     { q: "What does 'FUD' stand for in the crypto markets?", correct: "Fear, Uncertainty, and Doubt", incorrect: ["Financial Utility Data", "Fiat Underlying Derivative", "Free Unlocked Deposits"] },
 
-    // --- FUNNY & RANDOM TRIVIA (10 Questions) ---
+    // --- FUNNY & RANDOM TRIVIA ---
     { q: "What is the national animal of Scotland?", correct: "The Unicorn", incorrect: ["The Highland Cow", "The Loch Ness Monster", "The Golden Eagle"] },
     { q: "Approximately how much of human DNA is identical to a banana?", correct: "60%", incorrect: ["10%", "99%", "0%"] },
     { q: "What shape is wombat poop?", correct: "Cube-shaped", incorrect: ["Spherical", "Pyramid-shaped", "Flat like a pancake"] },
@@ -100,24 +98,32 @@ io.on('connection', (socket) => {
     io.to(code).emit('state', rooms[code]);
   });
 
-  // FIX: Handles joining, mid-game locks, and refresh re-connections
+  // FIX 2: Host Refresh Recovery
+  socket.on('reclaim_host', ({ code }) => {
+    if (rooms[code]) {
+        rooms[code].hostSocketId = socket.id;
+        socket.join(code);
+        socket.emit('created', { code }); 
+        io.to(code).emit('state', rooms[code]);
+    } else {
+        socket.emit('err', 'ROOM_EXPIRED'); // Tell host to create a new room
+    }
+  });
+
   socket.on('join', ({ code, name }) => {
     const room = rooms[code];
     if (!room) return socket.emit('err', 'Invalid Room Code');
 
-    // Look if user already exists (for page refresh persistence)
     const existingPlayer = room.players.find(p => p.name === name);
 
     if (room.phase !== 'lobby') {
         if (existingPlayer) {
-            // Takeover old seat
             existingPlayer.id = socket.id;
             socket.join(code);
             socket.emit('joined', { name: existingPlayer.name, balance: existingPlayer.balance });
             io.to(code).emit('state', room);
             return;
         } else {
-            // Block completely new entries
             return socket.emit('err', 'Game already in progress');
         }
     }
@@ -130,7 +136,8 @@ io.on('connection', (socket) => {
         return;
     }
 
-    const newPlayer = { id: socket.id, name, balance: 1000, bet: null, lastResult: null, eliminatedAt: null };
+    // FIX 1: Added totalBet and totalWon tracking
+    const newPlayer = { id: socket.id, name, balance: 1000, bet: null, lastResult: null, eliminatedAt: null, totalBet: 0, totalWon: 0 };
     room.players.push(newPlayer);
     socket.join(code);
     
@@ -138,7 +145,6 @@ io.on('connection', (socket) => {
     io.to(code).emit('state', room);
   });
 
-  // FIX: Kick Player Core Logic
   socket.on('kick_player', ({ pId }) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if (roomCode && rooms[roomCode]) {
@@ -147,7 +153,7 @@ io.on('connection', (socket) => {
         if (pIndex !== -1) {
             const targetSocketId = room.players[pIndex].id;
             room.players.splice(pIndex, 1);
-            io.to(targetSocketId).emit('kicked'); // Tell mobile phone they are out
+            io.to(targetSocketId).emit('kicked'); 
             io.to(roomCode).emit('state', room);
         }
     }
@@ -165,6 +171,10 @@ io.on('connection', (socket) => {
 
         player.bet = { option: betData.option, amount: amountToBet };
         player.balance -= amountToBet; 
+        
+        // FIX 1: Track cumulative betting
+        player.totalBet += amountToBet;
+
         io.to(roomCode).emit('state', room); 
       }
     }
@@ -195,6 +205,7 @@ io.on('connection', (socket) => {
                 if (p.bet.option === room.currentQ.ans) {
                     const payout = p.bet.amount * 2;
                     p.balance += payout; 
+                    p.totalWon += payout; // FIX 1: Track cumulative winnings
                     p.lastResult = { won: true, msg: `+ $${payout}` };
                 } else {
                     p.lastResult = { won: false, msg: `- $${p.bet.amount}` };
@@ -222,7 +233,14 @@ io.on('connection', (socket) => {
         const room = rooms[roomCode];
         room.phase = 'lobby';
         room.round = 0;
-        room.players.forEach(p => { p.balance = 1000; p.bet = null; p.lastResult = null; p.eliminatedAt = null; });
+        room.players.forEach(p => { 
+            p.balance = 1000; 
+            p.bet = null; 
+            p.lastResult = null; 
+            p.eliminatedAt = null; 
+            p.totalBet = 0; 
+            p.totalWon = 0; 
+        });
         io.to(roomCode).emit('state', room);
     }
   });
