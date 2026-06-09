@@ -97,7 +97,6 @@
   const socket = io();
   let myName = "", myBal = 1000, ans = null, wag = null, myRank = 0, currentPhase = null;
 
-  // --- CRASH-PROOF AUDIO ENGINE ---
   const AudioContext = window.AudioContext || window.webkitAudioContext;
   const audioCtx = new AudioContext();
 
@@ -108,7 +107,6 @@
         const gain = audioCtx.createGain();
         osc.type = type;
         
-        // Force the volume to start at 1 and drop to 0 safely
         gain.gain.setValueAtTime(1, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
         
@@ -184,18 +182,6 @@
       playTone(900, 'square', 0.1);
       socket.emit('use_peek');
   }
-
-  socket.on('peek_result', (peekData) => {
-      document.getElementById('btnPeek').disabled = true;
-      document.getElementById('btnPeek').innerText = "❌ Used";
-      if (peekData.length === 0) {
-          document.getElementById('peekResult').innerText = "No other players to peek at!";
-      } else {
-          let text = "Top Players: ";
-          peekData.forEach(p => text += `${p.name} (${p.bet}) `);
-          document.getElementById('peekResult').innerText = text;
-      }
-  });
 
   function selAns(val) {
     playTone(600, 'sine', 0.1);
@@ -317,12 +303,22 @@
           const btn50 = document.getElementById('btn5050');
           const btnPk = document.getElementById('btnPeek');
           
-          if(me.powerups.fifty > 0) { btn50.disabled = false; btn50.innerText = "💡 50/50"; }
+          // SAFE CHECK: Added me.powerups &&
+          if(me.powerups && me.powerups.fifty > 0) { btn50.disabled = false; btn50.innerText = "💡 50/50"; }
           else { btn50.disabled = true; btn50.innerText = "❌ Used"; }
           
-          if(me.powerups.peek > 0) { btnPk.disabled = false; btnPk.innerText = "🔍 Peek"; }
+          if(me.powerups && me.powerups.peek > 0) { btnPk.disabled = false; btnPk.innerText = "👁️ Peek"; }
           else { btnPk.disabled = true; btnPk.innerText = "❌ Used"; }
       }
+      
+      // 🔮 THE FIX: Live Updating Peek! 
+      if (me && me.powerups && me.powerups.peek === 0) {
+          const topPlayers = [...state.players].filter(p => p.id !== socket.id).sort((a,b) => b.balance - a.balance).slice(0, 3);
+          let text = "Top Players: ";
+          topPlayers.forEach(p => text += `${p.name} (${p.bet ? p.bet.option : "Thinking..."}) `);
+          document.getElementById('peekResult').innerText = text;
+      }
+
       if (me && me.bet) {
           document.getElementById('confirmBtn').innerText = "BET LOCKED";
           document.getElementById('confirmBtn').disabled = true;
