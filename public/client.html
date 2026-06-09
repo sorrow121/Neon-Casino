@@ -16,11 +16,18 @@
   .btn-full { width: 100%; background: #00ff88; color: black; }
   .btn-full:disabled { background: #333; color: #666;}
   
-  .balance { font-size: 2.5rem; color: #f0c040; font-family: 'Orbitron'; margin-bottom: 20px; }
+  .balance { font-size: 2.5rem; color: #f0c040; font-family: 'Orbitron'; margin-bottom: 10px; }
   
+  /* POWERUPS UI */
+  .powerup-row { display: flex; gap: 10px; margin-bottom: 15px; }
+  .btn-power { flex: 1; background: rgba(0,212,255,0.1); border: 2px solid var(--cyan); color: #00d4ff; font-size: 0.9rem; padding: 10px; }
+  .btn-power:disabled { border-color: #333; color: #555; background: transparent; }
+  #peekResult { font-size: 0.85rem; color: #00d4ff; margin-bottom: 10px; min-height: 20px;}
+
   .ans-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;}
   .ans-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 2rem; padding: 30px 10px;}
   .ans-btn.selected { border-color: #00ff88; background: rgba(0,255,136,0.2); color: #00ff88; box-shadow: 0 0 15px rgba(0,255,136,0.4);}
+  .ans-btn:disabled { opacity: 0.1; cursor: not-allowed; border-color: #000; }
   
   .wager-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;}
   .wager-btn { background: #1a1a2e; border: 2px solid #333; color: white; font-size: 1rem;}
@@ -28,7 +35,6 @@
   
   #errorMsg { color: #ff2d55; font-size: 0.9rem; min-height: 20px; margin-bottom: 10px;}
   .custom-input { width: 100%; padding: 15px; margin-bottom: 20px; font-size: 1.2rem; text-align: center; background: #1a1a2e; color: #00d4ff; border: 2px solid #333; border-radius: 10px; font-family: 'Orbitron'; outline: none;}
-  .custom-input:focus { border-color: #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.4);}
 </style>
 </head>
 <body>
@@ -57,18 +63,22 @@
   </div>
 
   <div id="betScreen" class="screen">
-    <div>YOUR CHIPS</div>
+    <div style="color:#888; font-size:0.9rem;">YOUR CHIPS</div>
     <div class="balance" id="myBal"></div>
     
-    <div style="text-align:left; color:#888; margin-bottom:5px;">1. Select Answer</div>
+    <div class="powerup-row">
+        <button class="btn-power" id="btn5050" onclick="use5050()">💡 50/50</button>
+        <button class="btn-power" id="btnPeek" onclick="usePeek()">👁️ Peek</button>
+    </div>
+    <div id="peekResult"></div>
+
     <div class="ans-grid" id="ansGrid">
-      <button class="ans-btn" onclick="selAns('A')">A</button>
-      <button class="ans-btn" onclick="selAns('B')">B</button>
-      <button class="ans-btn" onclick="selAns('C')">C</button>
-      <button class="ans-btn" onclick="selAns('D')">D</button>
+      <button class="ans-btn" id="ansA" onclick="selAns('A')">A</button>
+      <button class="ans-btn" id="ansB" onclick="selAns('B')">B</button>
+      <button class="ans-btn" id="ansC" onclick="selAns('C')">C</button>
+      <button class="ans-btn" id="ansD" onclick="selAns('D')">D</button>
     </div>
 
-    <div style="text-align:left; color:#888; margin-bottom:5px;">2. Wager Amount</div>
     <div class="wager-grid" id="wagGrid">
       <button class="wager-btn" onclick="selWag(50)">$50</button>
       <button class="wager-btn" onclick="selWag(100)">$100</button>
@@ -86,14 +96,26 @@
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
-  let myName = "";
-  let myBal = 1000;
-  let ans = null;
-  let wag = null;
-  let myRank = 0;
-  let currentPhase = null; 
+  let myName = "", myBal = 1000, ans = null, wag = null, myRank = 0, currentPhase = null;
 
-  // FIX: Restore session data automatically on unexpected browser refreshes
+  // --- AUDIO ENGINE ---
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  function playTone(freq, type, dur) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  }
+
+  // Interaction unlock for audio
+  document.body.addEventListener('click', () => { if(audioCtx.state === 'suspended') audioCtx.resume(); }, {once:true});
+
   window.onload = () => {
       const savedCode = localStorage.getItem('nn_code');
       const savedName = localStorage.getItem('nn_name');
@@ -105,7 +127,6 @@
       }
   }
 
-  // FIX: Clear records if evicted by host
   socket.on('kicked', () => {
       localStorage.removeItem('nn_code');
       localStorage.removeItem('nn_name');
@@ -119,6 +140,7 @@
   }
 
   function joinGame() {
+    playTone(500, 'sine', 0.1);
     const c = document.getElementById('code').value.trim();
     myName = document.getElementById('name').value.trim();
     if(c && myName) {
@@ -133,17 +155,42 @@
       localStorage.removeItem('nn_code');
       localStorage.removeItem('nn_name');
   });
+
+  // --- POWERUP LOGIC ---
+  function use5050() {
+      playTone(900, 'square', 0.1);
+      socket.emit('use_5050');
+  }
   
-  socket.on('joined', (data) => { 
-    myBal = data.balance; 
-    document.getElementById('lobbyScreen').innerHTML = `
-        <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
-        <p style="margin-top:10px; color:#888;">You are at the table.<br>Waiting for host to deal...</p>
-    `;
-    show('lobbyScreen'); 
+  socket.on('5050_result', (toHide) => {
+      document.getElementById('btn5050').disabled = true;
+      document.getElementById('btn5050').innerText = "❌ Used";
+      toHide.forEach(letter => {
+          document.getElementById(`ans${letter}`).disabled = true;
+          if (ans === letter) ans = null; // Unselect if they had the wrong one picked
+      });
+      checkValid();
+  });
+
+  function usePeek() {
+      playTone(900, 'square', 0.1);
+      socket.emit('use_peek');
+  }
+
+  socket.on('peek_result', (peekData) => {
+      document.getElementById('btnPeek').disabled = true;
+      document.getElementById('btnPeek').innerText = "❌ Used";
+      if (peekData.length === 0) {
+          document.getElementById('peekResult').innerText = "No other players to peek at!";
+      } else {
+          let text = "Top Players: ";
+          peekData.forEach(p => text += `${p.name} (${p.bet}) `);
+          document.getElementById('peekResult').innerText = text;
+      }
   });
 
   function selAns(val) {
+    playTone(600, 'sine', 0.1);
     if(navigator.vibrate) navigator.vibrate(20);
     ans = val;
     document.querySelectorAll('.ans-btn').forEach(b => {
@@ -166,6 +213,7 @@
   }
 
   function selWag(val) {
+    playTone(700, 'sine', 0.1);
     if(navigator.vibrate) navigator.vibrate(20);
     wag = val;
     document.getElementById('customWag').value = ''; 
@@ -196,6 +244,7 @@
   }
 
   function placeBet() {
+    playTone(800, 'triangle', 0.2);
     if(navigator.vibrate) navigator.vibrate([50, 50, 50]);
     socket.emit('place_bet', { option: ans, amount: wag });
     document.getElementById('confirmBtn').innerText = "BET LOCKED";
@@ -213,30 +262,17 @@
           if (b.balance !== a.balance) return b.balance - a.balance;
           return (b.eliminatedAt || 0) - (a.eliminatedAt || 0);
       });
-      
       myRank = sorted.findIndex(p => p.name === myName) + 1;
       const rankText = "LEADERBOARD RANK: #" + myRank;
       document.getElementById('deadRank').innerText = rankText;
       document.getElementById('finalRankDisplay').innerText = rankText;
     }
     
-    if (state.phase === 'game_over') {
-        show('gameOverScreen');
-        currentPhase = state.phase;
-        return;
-    }
-
-    if (me && me.balance <= 0 && !me.bet && state.phase !== 'results') {
-      show('bankruptScreen');
-      currentPhase = state.phase;
-      return; 
-    }
+    if (state.phase === 'game_over') { show('gameOverScreen'); currentPhase = state.phase; return; }
+    if (me && me.balance <= 0 && !me.bet && state.phase !== 'results') { show('bankruptScreen'); currentPhase = state.phase; return; }
 
     if (state.phase === 'lobby') {
-      document.getElementById('lobbyScreen').innerHTML = `
-        <h2 style="color:#00d4ff;">VIP LOUNGE</h2>
-        <p style="margin-top:10px; color:#888;">Waiting for host to deal...</p>
-      `;
+      document.getElementById('lobbyScreen').innerHTML = `<h2 style="color:#00d4ff;">VIP LOUNGE</h2><p style="margin-top:10px; color:#888;">Waiting for host to deal...</p>`;
       show('lobbyScreen');
     } 
     else if (state.phase === 'results') {
@@ -249,21 +285,43 @@
           <p style="font-size:1.5rem; margin: 15px 0;">${me.lastResult.msg}</p>
           <div style="font-family:'Orbitron'; color:var(--gold); font-size:1.2rem; margin-top:20px;">LEADERBOARD RANK: #${myRank}</div>
         `;
-        if(me.lastResult.won && navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
+        
+        // Play Win/Lose Sound
+        if(me.lastResult.won) {
+            playTone(600, 'sine', 0.2); setTimeout(()=>playTone(800, 'sine', 0.4), 200);
+            if(navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 300]);
+        } else {
+            playTone(200, 'sawtooth', 0.5);
+            if(navigator.vibrate) navigator.vibrate(500);
+        }
       }
     } 
     else if(state.phase === 'betting') {
       if (currentPhase !== 'betting') {
           ans = null; wag = null;
           document.getElementById('customWag').value = '';
-          document.querySelectorAll('.ans-btn, .wager-btn').forEach(b => b.classList.remove('selected'));
+          document.getElementById('peekResult').innerText = '';
+          document.querySelectorAll('.ans-btn').forEach(b => { b.classList.remove('selected'); b.disabled = false; });
+          document.querySelectorAll('.wager-btn').forEach(b => b.classList.remove('selected'));
           document.getElementById('confirmBtn').innerText = "LOCK IN BET";
           document.getElementById('confirmBtn').disabled = true;
           document.getElementById('betError').innerText = "";
+          
+          // Set Powerup Buttons
+          const btn50 = document.getElementById('btn5050');
+          const btnPk = document.getElementById('btnPeek');
+          
+          if(me.powerups.fifty > 0) { btn50.disabled = false; btn50.innerText = "💡 50/50"; }
+          else { btn50.disabled = true; btn50.innerText = "❌ Used"; }
+          
+          if(me.powerups.peek > 0) { btnPk.disabled = false; btnPk.innerText = "👁️ Peek"; }
+          else { btnPk.disabled = true; btnPk.innerText = "❌ Used"; }
       }
       if (me && me.bet) {
           document.getElementById('confirmBtn').innerText = "BET LOCKED";
           document.getElementById('confirmBtn').disabled = true;
+          document.getElementById('btn5050').disabled = true;
+          document.getElementById('btnPeek').disabled = true;
       }
       show('betScreen');
     }
