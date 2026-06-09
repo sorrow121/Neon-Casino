@@ -27,7 +27,6 @@
   .wager-btn.selected { border-color: #f0c040; background: rgba(240,192,64,0.2); color: #f0c040; box-shadow: 0 0 15px rgba(240,192,64,0.4);}
   
   #errorMsg { color: #ff2d55; font-size: 0.9rem; min-height: 20px; margin-bottom: 10px;}
-
   .custom-input { width: 100%; padding: 15px; margin-bottom: 20px; font-size: 1.2rem; text-align: center; background: #1a1a2e; color: #00d4ff; border: 2px solid #333; border-radius: 10px; font-family: 'Orbitron'; outline: none;}
   .custom-input:focus { border-color: #00d4ff; box-shadow: 0 0 15px rgba(0,212,255,0.4);}
 </style>
@@ -42,8 +41,7 @@
     <div id="errorMsg"></div>
   </div>
 
-  <div id="lobbyScreen" class="screen">
-    </div>
+  <div id="lobbyScreen" class="screen"></div>
   
   <div id="gameOverScreen" class="screen">
     <h1 style="color:var(--gold); font-family:'Orbitron'; font-size: 3.5rem;">GAME OVER</h1>
@@ -93,9 +91,27 @@
   let ans = null;
   let wag = null;
   let myRank = 0;
-  
-  // FIX: Keep track of the current phase so we don't accidentally erase bets
   let currentPhase = null; 
+
+  // FIX: Restore session data automatically on unexpected browser refreshes
+  window.onload = () => {
+      const savedCode = localStorage.getItem('nn_code');
+      const savedName = localStorage.getItem('nn_name');
+      if (savedCode && savedName) {
+          document.getElementById('code').value = savedCode;
+          document.getElementById('name').value = savedName;
+          myName = savedName;
+          socket.emit('join', { code: savedCode, name: savedName });
+      }
+  }
+
+  // FIX: Clear records if evicted by host
+  socket.on('kicked', () => {
+      localStorage.removeItem('nn_code');
+      localStorage.removeItem('nn_name');
+      alert("You have been kicked out of the table by the Host.");
+      window.location.reload();
+  });
 
   function show(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -103,12 +119,20 @@
   }
 
   function joinGame() {
-    const c = document.getElementById('code').value;
-    myName = document.getElementById('name').value;
-    if(c && myName) socket.emit('join', { code: c, name: myName });
+    const c = document.getElementById('code').value.trim();
+    myName = document.getElementById('name').value.trim();
+    if(c && myName) {
+        localStorage.setItem('nn_code', c);
+        localStorage.setItem('nn_name', myName);
+        socket.emit('join', { code: c, name: myName });
+    }
   }
 
-  socket.on('err', (msg) => document.getElementById('errorMsg').innerText = msg);
+  socket.on('err', (msg) => {
+      document.getElementById('errorMsg').innerText = msg;
+      localStorage.removeItem('nn_code');
+      localStorage.removeItem('nn_name');
+  });
   
   socket.on('joined', (data) => { 
     myBal = data.balance; 
@@ -129,12 +153,10 @@
     checkValid();
   }
 
-  // FIX: Custom Wager Function
   function selCustomWag() {
     const val = parseInt(document.getElementById('customWag').value);
     if (!isNaN(val) && val > 0) {
         wag = val;
-        // Clear highlighted buttons if custom is used
         document.querySelectorAll('.wager-btn').forEach(b => b.classList.remove('selected'));
         checkValid();
     } else {
@@ -146,7 +168,7 @@
   function selWag(val) {
     if(navigator.vibrate) navigator.vibrate(20);
     wag = val;
-    document.getElementById('customWag').value = ''; // Clear custom input box
+    document.getElementById('customWag').value = ''; 
     document.querySelectorAll('.wager-btn').forEach(b => {
       b.classList.remove('selected');
       if(b.innerText === `$${val}` || (val === 'all' && b.innerText === 'ALL IN')) b.classList.add('selected');
@@ -231,7 +253,6 @@
       }
     } 
     else if(state.phase === 'betting') {
-      // FIX: Only erase the screen if this is the FIRST time we are entering the betting phase this round
       if (currentPhase !== 'betting') {
           ans = null; wag = null;
           document.getElementById('customWag').value = '';
@@ -240,15 +261,13 @@
           document.getElementById('confirmBtn').disabled = true;
           document.getElementById('betError').innerText = "";
       }
-      // If you specifically already locked in your bet, keep the button disabled
       if (me && me.bet) {
           document.getElementById('confirmBtn').innerText = "BET LOCKED";
           document.getElementById('confirmBtn').disabled = true;
       }
       show('betScreen');
     }
-    
-    currentPhase = state.phase; // Update memory
+    currentPhase = state.phase; 
   });
 </script>
 </body>
