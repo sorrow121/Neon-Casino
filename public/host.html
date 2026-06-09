@@ -18,6 +18,13 @@
   .trivia-board { background: var(--card); border: 2px solid rgba(255,255,255,0.1); padding: 40px; border-radius: 20px; width: 100%; max-width: 1000px; text-align: center; margin-bottom: 30px; }
   .trivia-board.active { border-color: var(--cyan); box-shadow: 0 0 30px rgba(0,212,255,0.2); }
   
+  /* FIX 3: Rules Box Styling */
+  .lobby-flex { display: flex; justify-content: center; gap: 40px; align-items: stretch; margin-top: 20px;}
+  .rules-box { border: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.4); padding: 20px; border-radius: 15px; text-align: left; max-width: 350px;}
+  .rules-box h3 { color: var(--cyan); font-family: 'Orbitron'; margin-bottom: 10px; font-size: 1.2rem;}
+  .rules-box p { color: #aaa; font-size: 0.95rem; margin-bottom: 8px; line-height: 1.4;}
+  .rules-box strong { color: var(--gold); }
+
   .question { font-size: 2rem; font-weight: bold; margin-bottom: 30px; color: white; }
   .options-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   .option { background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); padding: 20px; font-size: 1.5rem; font-weight: bold; border-radius: 10px; transition: 0.3s; }
@@ -40,15 +47,20 @@
   .p-status.win { color: var(--green); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
   .p-status.lose { color: var(--red); font-weight: bold; font-family: 'Orbitron'; font-size:1.2rem;}
 
-  /* FIX: Sleek Neon Kick Button Styling */
   .btn-kick { background: rgba(255, 45, 85, 0.15); border: 1px solid var(--red); color: var(--red); font-family: 'Orbitron'; font-size: 0.75rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; cursor: pointer; margin-top: 10px; display: inline-block; transition: 0.2s; }
   .btn-kick:hover { background: var(--red); color: black; box-shadow: 0 0 12px #ff2d55; }
 
   #podiumScreen { display: none; width: 100%; flex-direction: column; align-items: center; margin-top: 20px; margin-bottom: 100px;}
   .podium-spot { display: flex; flex-direction: column; align-items: center; width: 220px; }
-  .podium-name { font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; margin-bottom: 15px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
+  .podium-name { font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; margin-bottom: 5px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;}
   .podium-block { width: 100%; border-top-left-radius: 20px; border-top-right-radius: 20px; display: flex; justify-content: center; align-items: center; font-family: 'Orbitron'; font-size: 4rem; font-weight: 900; color: rgba(0,0,0,0.6); border: 2px solid; border-bottom: none;}
   
+  /* FIX 1: Podium Stat Blocks */
+  .podium-stats { margin-top: 15px; font-family: 'DM Sans'; font-size: 0.9rem; color: #aaa; text-align: center; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); width: 100%;}
+  .podium-stats span { font-family: 'Orbitron'; font-weight: bold; }
+  .stat-won { color: var(--green); }
+  .stat-bet { color: var(--gold); }
+
   .rank-1 .podium-name { color: var(--gold); text-shadow: var(--glow-gold); }
   .rank-1 .podium-block { height: 300px; background: rgba(240,192,64,0.2); border-color: var(--gold); box-shadow: 0 -10px 40px rgba(240,192,64,0.5); }
   
@@ -80,8 +92,7 @@
   </div>
 
   <div class="trivia-board" id="triviaBoard">
-    <div id="lobbyMsg" style="font-size:2rem; color:var(--cyan); font-family:'Orbitron';">WAITING FOR PLAYERS...</div>
-    <div id="qData" style="display:none;">
+    <div id="lobbyMsg"></div> <div id="qData" style="display:none;">
       <h3 style="color:var(--gold); margin-bottom:10px;" id="roundDisplay">ROUND 1</h3>
       <div class="question" id="qText"></div>
       <div class="options-grid" id="qOptions"></div>
@@ -92,7 +103,7 @@
 
   <div id="podiumScreen">
     <h1 style="font-size: 4.5rem; color: var(--gold); text-shadow: var(--glow-gold); margin-bottom: 40px;">FINAL STANDINGS</h1>
-    <div id="podiumGroup" style="display: flex; align-items: flex-end; justify-content: center; gap: 20px; height: 350px;"></div>
+    <div id="podiumGroup" style="display: flex; align-items: flex-end; justify-content: center; gap: 20px; height: 450px;"></div>
   </div>
 
   <div class="host-controls" id="controls"></div>
@@ -102,7 +113,24 @@
 <script>
   const socket = io();
   
+  // FIX 2: Host Auto-Recovery on Refresh
+  window.onload = () => {
+    const savedCode = localStorage.getItem('nn_host_code');
+    if (savedCode) {
+        socket.emit('reclaim_host', { code: savedCode });
+    }
+  };
+
+  socket.on('err', (msg) => {
+    if (msg === 'ROOM_EXPIRED') {
+        localStorage.removeItem('nn_host_code');
+        document.getElementById('setup').style.display = 'block';
+        document.getElementById('main').style.display = 'none';
+    }
+  });
+
   socket.on('created', ({ code }) => {
+    localStorage.setItem('nn_host_code', code);
     document.getElementById('setup').style.display = 'none';
     document.getElementById('main').style.display = 'flex';
     document.getElementById('roomCode').innerText = code;
@@ -141,10 +169,15 @@
         if (top3[2]) displayOrder.push({ p: top3[2], rank: 3 });
 
         displayOrder.forEach(item => {
+            // FIX 1: Detailed Podium Stats injected here
             podiumGroup.innerHTML += `
                 <div class="podium-spot rank-${item.rank}">
                     <div class="podium-name">${item.p.name}</div>
                     <div class="podium-block">#${item.rank}</div>
+                    <div class="podium-stats">
+                        Total Bet: <span class="stat-bet">$${item.p.totalBet}</span><br>
+                        Total Won: <span class="stat-won">$${item.p.totalWon}</span>
+                    </div>
                 </div>
             `;
         });
@@ -172,9 +205,26 @@
                 <input type="number" id="maxRoundsInput" value="5" min="1" max="20" style="font-size:1.2rem; width:60px; text-align:center; background:#111; color:var(--green); border:2px solid var(--green); border-radius:5px; font-family:'Orbitron';">
             </div>`;
         }
-        lobbyMsg.innerHTML = `<div style="font-size:3rem; color:var(--green);">VIP LOBBY</div><div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in. Ready to start!</div>${settingsHtml}`;
+        
+        // FIX 3: Injection of the sleek Rules Side-Panel
+        lobbyMsg.innerHTML = `
+            <div style="font-size:3rem; color:var(--green); font-family:'Orbitron';">VIP LOBBY</div>
+            <div class="lobby-flex">
+                <div style="flex: 1;">
+                    <div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in.<br>Ready to start!</div>
+                    ${settingsHtml}
+                </div>
+                <div class="rules-box">
+                    <h3>HOW TO PLAY</h3>
+                    <p><strong>1.</strong> Read the question on the big screen.</p>
+                    <p><strong>2.</strong> Choose A, B, C, or D on your phone and place your bet.</p>
+                    <p><strong>3.</strong> Correct answers <strong>DOUBLE</strong> your bet! Wrong answers lose it.</p>
+                    <p><strong>4.</strong> Hit $0 and you are eliminated. The highest balance at the end wins.</p>
+                </div>
+            </div>
+        `;
       } else {
-        lobbyMsg.innerHTML = `WAITING FOR PLAYERS...`;
+        lobbyMsg.innerHTML = `<div style="font-size:2rem; color:var(--cyan); font-family:'Orbitron';">WAITING FOR PLAYERS...</div>`;
       }
 
     } else if(state.phase === 'betting' || state.phase === 'results') {
@@ -232,7 +282,6 @@
         if(p.lastResult.won) cardClass += " ready";
       }
 
-      // FIX: Append Kick Controls dynamically if in lobby
       let kickBtnHtml = '';
       if (state.phase === 'lobby') {
           kickBtnHtml = `<br><button class="btn-kick" onclick="socket.emit('kick_player', { pId: '${p.id}' })">KICK</button>`;
