@@ -7,67 +7,42 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static('public'));
-
 const rooms = {};
 
+// ==========================================
+// 🧠 CATEGORIZED QUESTION DATABASE
+// ==========================================
 const customDatabase = [
-    // --- FINANCIAL BLOCKCHAIN ---
-    { q: "What is the primary benefit of a 'Smart Contract' in finance?", correct: "Automated self-execution of agreements", incorrect: ["Customer service live chat", "Physical document storage", "Printing paper money"] },
-    { q: "What does 'DeFi' stand for in the blockchain space?", correct: "Decentralized Finance", incorrect: ["Digital Exchange Fiat", "Derivative Financial Instrument", "Decrypted File Interface"] },
-    { q: "Which consensus mechanism is considered more energy-efficient?", correct: "Proof of Stake (PoS)", incorrect: ["Proof of Work (PoW)", "Proof of Print (PoP)", "Proof of Vault (PoV)"] },
-    { q: "In blockchain auditing, what makes the ledger highly secure?", correct: "It is immutable and append-only", incorrect: ["It is stored on a single central server", "It can be easily edited by admins", "It is backed by physical gold"] },
-    { q: "What are 'Gas Fees' in a blockchain network?", correct: "Costs to compensate validators for computing power", incorrect: ["Taxes paid to the government", "Monthly subscription costs for wallets", "Penalties for typing the wrong password"] },
-    { q: "What is a CBDC?", correct: "Central Bank Digital Currency", incorrect: ["Crypto-Backed Data Contract", "Centralized Blockchain Decentralized Coin", "Corporate Bank Derivative Crypto"] },
-    { q: "How does blockchain improve supply chain finance?", correct: "By providing transparent, real-time tracking of assets", incorrect: ["By making shipping boats move faster", "By eliminating all international taxes", "By replacing factory workers with AI"] },
-    { q: "What cryptographic process links a new block to the previous block?", correct: "Hashing", incorrect: ["Zipping", "Encrypting", "Compiling"] },
-    { q: "What is a 'DAO'?", correct: "Decentralized Autonomous Organization", incorrect: ["Digital Asset Offering", "Data Algorithm Output", "Distributed Account Operator"] },
-    { q: "What problem do 'Stablecoins' attempt to solve?", correct: "High price volatility in cryptocurrencies", incorrect: ["The slow speed of the internet", "The lack of physical bank branches", "The high cost of mining hardware"] },
-    { q: "What is the role of an 'Oracle' in smart contracts?", correct: "To feed real-world off-chain data to the blockchain", incorrect: ["To predict the future price of Bitcoin", "To encrypt the user's password", "To delete old contracts"] },
-    { q: "In DeFi, what is a 'Liquidity Pool'?", correct: "Locked funds in a smart contract used to facilitate trading", incorrect: ["A backup server for offline transactions", "A physical bank vault holding cash", "A group of investors pooling money to buy stocks"] },
-    { q: "What is a '51% Attack'?", correct: "When a single entity gains majority control of the network's computing power", incorrect: ["When 51% of users forget their passwords", "When fees increase by 51%", "When the government buys 51% of all crypto"] },
-    { q: "What is 'Yield Farming'?", correct: "Earning interest by lending or staking crypto assets", incorrect: ["Growing virtual crops in the metaverse", "Mining Bitcoin with solar power", "Buying crypto low and selling high"] },
-    { q: "What does 'KYC' stand for in financial compliance?", correct: "Know Your Customer", incorrect: ["Keep Your Crypto", "Key Yield Calculation", "Kinetic Yield Contract"] },
-    { q: "What is a 'Layer 2' solution?", correct: "A secondary framework built on top of a blockchain to improve scaling", incorrect: ["A backup blockchain used if the main one crashes", "A stricter security protocol for banks", "A new type of physical hardware wallet"] },
-    { q: "If you lose your 'Private Key', what happens?", correct: "You permanently lose access to your crypto assets", incorrect: ["You can reset it via email", "The bank sends you a new one", "You have to pay a small fine to recover it"] },
-    { q: "What is an 'AMM' in decentralized exchanges?", correct: "Automated Market Maker", incorrect: ["Asset Management Module", "Algorithm Mining Machine", "Active Money Multiplier"] },
-    { q: "What is the 'Genesis Block'?", correct: "The very first block ever recorded on a blockchain network", incorrect: ["A block that contains illegal transactions", "The block that creates new wallets", "A block reserved for developers"] },
-    { q: "What is 'Slashing' in a Proof of Stake network?", correct: "A penalty where a validator loses tokens for acting maliciously", incorrect: ["Cutting transaction fees in half", "Hacking into a smart contract", "Dividing a token into smaller decimals"] },
-    { q: "Fiat-collateralized stablecoins are backed by what?", correct: "Traditional currencies like the US Dollar", incorrect: ["Other cryptocurrencies", "Complex math algorithms", "Nothing"] },
-    { q: "What is the main purpose of a 'Nonce' in mining?", correct: "A random number used once to solve the cryptographic puzzle", incorrect: ["A slang term for a new cryptocurrency", "The fee paid to execute a contract", "The signature of the block creator"] },
-    { q: "Which type of blockchain restricts who can participate and view the ledger?", correct: "Private / Permissioned Blockchain", incorrect: ["Public Blockchain", "Open-Source Blockchain", "Decentralized Blockchain"] },
-    { q: "What is 'Tokenomics'?", correct: "The study of the economics and incentives of a specific crypto token", incorrect: ["The physical manufacturing of digital coins", "A software program that trades automatically", "The legal taxation of digital assets"] },
-    { q: "What is 'Sharding' in blockchain architecture?", correct: "Splitting the network into smaller partitions to improve scalability", incorrect: ["Destroying old blocks to save space", "Encrypting passwords with a glass algorithm", "Combining two blockchains into one"] },
-    { q: "What does 'TVL' stand for in decentralized finance?", correct: "Total Value Locked", incorrect: ["Token Verification Ledger", "Transaction Volume Limit", "Temporary Vault Loan"] },
-    { q: "What is the main characteristic of an 'NFT'?", correct: "It represents a unique, non-interchangeable digital asset", incorrect: ["It is pegged to the US Dollar", "It is used exclusively to pay gas fees", "It can only be bought with physical cash"] },
-    { q: "What is a 'Rug Pull'?", correct: "A scam where developers abandon a project and steal investors' funds", incorrect: ["A sudden crash in the stock market", "A feature that reverses accidental transactions", "A physical hardware wallet malfunction"] },
-    { q: "What does 'DApp' stand for?", correct: "Decentralized Application", incorrect: ["Digital Asset Processing Protocol", "Data Allocation Program", "Distributed Accounting Process"] },
-    { q: "What is the 'Byzantine Generals Problem'?", correct: "A game theory problem detailing the difficulty of decentralized consensus", incorrect: ["A historical military tactic used to physically steal gold", "A bug in the original Bitcoin code", "The formula used to calculate gas fees"] },
-    { q: "In tokenomics, what is 'Vesting'?", correct: "Locking tokens for a set period before they can be sold", incorrect: ["Wearing a hardware wallet on a lanyard", "Burning tokens to increase their value", "Trading tokens between different networks"] },
-    { q: "What is the purpose of a 'Blockchain Bridge'?", correct: "To transfer tokens and data between two different blockchains", incorrect: ["To connect a blockchain to a physical bank branch", "To bypass paying any gas fees", "To securely store passwords offline"] },
-    { q: "What is 'Impermanent Loss' in DeFi?", correct: "The temporary loss of funds when providing liquidity to an AMM", incorrect: ["Forgetting your wallet password for a few days", "When a stablecoin loses its peg to the dollar", "When a transaction fails and the fee is lost"] },
-    { q: "What is an 'Airdrop' in crypto marketing?", correct: "Distributing free tokens to users' wallets to promote a project", incorrect: ["Using Bluetooth to send Bitcoin to a friend", "A sudden, massive drop in a token's price", "When a crypto exchange goes offline"] },
-    { q: "What is a 'Governance Token'?", correct: "A token that grants voting rights on project decisions", incorrect: ["A token issued directly by the government", "A token used only to pay taxes", "A token that can never be sold"] },
-    { q: "What does 'Cold Storage' mean in cryptocurrency?", correct: "Keeping digital assets offline for security", incorrect: ["Storing servers in a refrigerated warehouse", "Freezing a compromised bank account", "Waiting six months before selling a token"] },
-    { q: "What is a 'Mempool'?", correct: "A waiting area for unconfirmed transactions before they are added to a block", incorrect: ["A shared wallet used by multiple people", "A database of all banned users", "The code library used to build smart contracts"] },
-    { q: "What is 'Interoperability' in blockchain?", correct: "The ability of different blockchain networks to communicate and share data", incorrect: ["The ability to refund a completed transaction", "When a blockchain can run without the internet", "The process of converting crypto back to fiat cash"] },
-    { q: "What is a 'Sybil Attack'?", correct: "One entity creating multiple fake identities to gain network influence", incorrect: ["A physical attack on a server farm", "Guessing a password millions of times per second", "Stealing funds from an unprotected liquidity pool"] },
-    { q: "What does 'FUD' stand for in the crypto markets?", correct: "Fear, Uncertainty, and Doubt", incorrect: ["Financial Utility Data", "Fiat Underlying Derivative", "Free Unlocked Deposits"] },
+    // --- BLOCKCHAIN ---
+    { cat: "blockchain", q: "What is the primary benefit of a 'Smart Contract'?", correct: "Automated self-execution", incorrect: ["Live chat", "Physical storage", "Printing money"] },
+    { cat: "blockchain", q: "What does 'DeFi' stand for?", correct: "Decentralized Finance", incorrect: ["Digital Exchange Fiat", "Derivative Financial Instrument", "Decrypted File Interface"] },
+    { cat: "blockchain", q: "Which consensus is more energy-efficient?", correct: "Proof of Stake (PoS)", incorrect: ["Proof of Work (PoW)", "Proof of Print (PoP)", "Proof of Vault (PoV)"] },
+    { cat: "blockchain", q: "What are 'Gas Fees'?", correct: "Costs to compensate validators", incorrect: ["Taxes to government", "Monthly subscriptions", "Password penalties"] },
+    { cat: "blockchain", q: "What is a 'Rug Pull'?", correct: "A scam where developers steal funds", incorrect: ["A stock market crash", "Reversing a transaction", "Hardware malfunction"] },
+    
+    // --- VIDEO GAMES ---
+    { cat: "gaming", q: "What is the best-selling video game console of all time?", correct: "PlayStation 2", incorrect: ["Nintendo DS", "Xbox 360", "Nintendo Switch"] },
+    { cat: "gaming", q: "In Minecraft, what material is required to build a Nether Portal?", correct: "Obsidian", incorrect: ["Diamond", "Bedrock", "Cobblestone"] },
+    { cat: "gaming", q: "What is the name of the main protagonist in the Halo series?", correct: "Master Chief", incorrect: ["Doomguy", "Commander Shepard", "Marcus Fenix"] },
+    { cat: "gaming", q: "Which company created the game 'Counter-Strike'?", correct: "Valve", incorrect: ["Riot Games", "Blizzard", "Epic Games"] },
+    { cat: "gaming", q: "What is the highest selling video game of all time?", correct: "Minecraft", incorrect: ["Tetris", "GTA V", "Wii Sports"] },
 
-    // --- FUNNY & RANDOM TRIVIA ---
-    { q: "What is the national animal of Scotland?", correct: "The Unicorn", incorrect: ["The Highland Cow", "The Loch Ness Monster", "The Golden Eagle"] },
-    { q: "Approximately how much of human DNA is identical to a banana?", correct: "60%", incorrect: ["10%", "99%", "0%"] },
-    { q: "What shape is wombat poop?", correct: "Cube-shaped", incorrect: ["Spherical", "Pyramid-shaped", "Flat like a pancake"] },
-    { q: "Why are flamingos pink?", correct: "From eating shrimp and algae", incorrect: ["It is their natural genetic feather color", "To attract mates from long distances", "From sunburn in tropical climates"] },
-    { q: "How many hearts does an octopus have?", correct: "Three", incorrect: ["One", "Two", "Eight"] },
-    { q: "How long did the shortest war in history (Anglo-Zanzibar War) last?", correct: "38 minutes", incorrect: ["3 days", "12 hours", "1 week"] },
-    { q: "What do you call a group of crows?", correct: "A murder", incorrect: ["A flock", "A gaggle", "A parliament"] },
-    { q: "Which country invented ice cream?", correct: "China", incorrect: ["Italy", "France", "United States"] },
-    { q: "What is the fear of long words called?", correct: "Hippopotomonstrosesquippedaliophobia", incorrect: ["Arachnophobia", "Claustrophobia", "Megalophobia"] },
-    { q: "How many folds are in a traditional chef's hat (toque)?", correct: "100", incorrect: ["10", "50", "365"] }
+    // --- FUN TRIVIA ---
+    { cat: "trivia", q: "What shape is wombat poop?", correct: "Cube-shaped", incorrect: ["Spherical", "Pyramid-shaped", "Flat"] },
+    { cat: "trivia", q: "How many hearts does an octopus have?", correct: "Three", incorrect: ["One", "Two", "Eight"] },
+    { cat: "trivia", q: "Which country invented ice cream?", correct: "China", incorrect: ["Italy", "France", "USA"] },
+    { cat: "trivia", q: "What is the national animal of Scotland?", correct: "Unicorn", incorrect: ["Highland Cow", "Loch Ness Monster", "Eagle"] }
 ];
 
-function getCustomQuestion() {
-    const qData = customDatabase[Math.floor(Math.random() * customDatabase.length)];
+function getCustomQuestion(category) {
+    // Filter database by category, or mix them all if "mixed"
+    let pool = customDatabase;
+    if (category !== "mixed") {
+        pool = customDatabase.filter(q => q.cat === category);
+        if(pool.length === 0) pool = customDatabase; // Fallback
+    }
+
+    const qData = pool[Math.floor(Math.random() * pool.length)];
     const allOptions = [qData.correct, ...qData.incorrect];
     allOptions.sort(() => Math.random() - 0.5); 
 
@@ -84,21 +59,15 @@ function getCustomQuestion() {
     return { q: qData.q, options: finalOptions, ans: finalAnswerLetter };
 }
 
-app.get('/', (req, res) => {
-    res.redirect('/client.html');
-});
-
 io.on('connection', (socket) => {
-  
   socket.on('create', () => {
     const code = Math.floor(1000 + Math.random() * 9000).toString(); 
-    rooms[code] = { code, hostSocketId: socket.id, players: [], phase: 'lobby', round: 0, currentQ: null, maxRounds: 5 };
+    rooms[code] = { code, hostSocketId: socket.id, players: [], phase: 'lobby', round: 0, currentQ: null, maxRounds: 5, category: 'mixed' };
     socket.join(code);
     socket.emit('created', { code });
     io.to(code).emit('state', rooms[code]);
   });
 
-  // FIX 2: Host Refresh Recovery
   socket.on('reclaim_host', ({ code }) => {
     if (rooms[code]) {
         rooms[code].hostSocketId = socket.id;
@@ -106,7 +75,17 @@ io.on('connection', (socket) => {
         socket.emit('created', { code }); 
         io.to(code).emit('state', rooms[code]);
     } else {
-        socket.emit('err', 'ROOM_EXPIRED'); // Tell host to create a new room
+        socket.emit('err', 'ROOM_EXPIRED');
+    }
+  });
+
+  // Host closes the room manually
+  socket.on('close_room', () => {
+    const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
+    if(roomCode && rooms[roomCode]) {
+        io.to(roomCode).emit('kicked'); // Kick all players
+        delete rooms[roomCode]; // Destroy room
+        socket.emit('err', 'ROOM_EXPIRED'); // Reset host screen
     }
   });
 
@@ -123,9 +102,7 @@ io.on('connection', (socket) => {
             socket.emit('joined', { name: existingPlayer.name, balance: existingPlayer.balance });
             io.to(code).emit('state', room);
             return;
-        } else {
-            return socket.emit('err', 'Game already in progress');
-        }
+        } else return socket.emit('err', 'Game already in progress');
     }
 
     if (existingPlayer) {
@@ -136,11 +113,14 @@ io.on('connection', (socket) => {
         return;
     }
 
-    // FIX 1: Added totalBet and totalWon tracking
-    const newPlayer = { id: socket.id, name, balance: 1000, bet: null, lastResult: null, eliminatedAt: null, totalBet: 0, totalWon: 0 };
+    // NEW: Added powerups tracking
+    const newPlayer = { 
+        id: socket.id, name, balance: 1000, bet: null, lastResult: null, 
+        eliminatedAt: null, totalBet: 0, totalWon: 0, 
+        powerups: { fifty: 1, peek: 1 } 
+    };
     room.players.push(newPlayer);
     socket.join(code);
-    
     socket.emit('joined', { name, balance: 1000 });
     io.to(code).emit('state', room);
   });
@@ -159,6 +139,50 @@ io.on('connection', (socket) => {
     }
   });
 
+  // --- POWERUP LOGIC ---
+  socket.on('use_5050', () => {
+    const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
+    if(roomCode && rooms[roomCode]) {
+        const room = rooms[roomCode];
+        const player = room.players.find(p => p.id === socket.id);
+        if(player && player.powerups.fifty > 0 && room.phase === 'betting') {
+            player.powerups.fifty -= 1;
+            // Find 2 wrong answers
+            const correctAns = room.currentQ.ans;
+            const wrongOptions = ['A','B','C','D'].filter(l => l !== correctAns);
+            // Shuffle and pick 2
+            wrongOptions.sort(() => Math.random() - 0.5);
+            const toHide = [wrongOptions[0], wrongOptions[1]];
+            socket.emit('5050_result', toHide);
+            io.to(roomCode).emit('state', room); // update host to show used powerup
+        }
+    }
+  });
+
+  socket.on('use_peek', () => {
+    const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
+    if(roomCode && rooms[roomCode]) {
+        const room = rooms[roomCode];
+        const player = room.players.find(p => p.id === socket.id);
+        if(player && player.powerups.peek > 0 && room.phase === 'betting') {
+            player.powerups.peek -= 1;
+            
+            // Get top 3 players by balance (excluding the user asking)
+            const topPlayers = [...room.players]
+                .filter(p => p.id !== socket.id)
+                .sort((a,b) => b.balance - a.balance)
+                .slice(0, 3);
+            
+            const peekData = topPlayers.map(p => {
+                return { name: p.name, bet: p.bet ? p.bet.option : "Thinking..." };
+            });
+
+            socket.emit('peek_result', peekData);
+            io.to(roomCode).emit('state', room);
+        }
+    }
+  });
+
   socket.on('place_bet', (betData) => {
     const roomCode = Array.from(socket.rooms).find(r => r !== socket.id);
     if(roomCode && rooms[roomCode]) {
@@ -171,10 +195,7 @@ io.on('connection', (socket) => {
 
         player.bet = { option: betData.option, amount: amountToBet };
         player.balance -= amountToBet; 
-        
-        // FIX 1: Track cumulative betting
         player.totalBet += amountToBet;
-
         io.to(roomCode).emit('state', room); 
       }
     }
@@ -185,9 +206,10 @@ io.on('connection', (socket) => {
     if(roomCode && rooms[roomCode]) {
         const room = rooms[roomCode];
         if (settings && settings.maxRounds) room.maxRounds = parseInt(settings.maxRounds);
+        if (settings && settings.category) room.category = settings.category;
 
         room.round++;
-        room.currentQ = getCustomQuestion();
+        room.currentQ = getCustomQuestion(room.category);
         room.phase = 'betting';
         room.players.forEach(p => { p.bet = null; p.lastResult = null; });
         io.to(roomCode).emit('state', room);
@@ -205,7 +227,7 @@ io.on('connection', (socket) => {
                 if (p.bet.option === room.currentQ.ans) {
                     const payout = p.bet.amount * 2;
                     p.balance += payout; 
-                    p.totalWon += payout; // FIX 1: Track cumulative winnings
+                    p.totalWon += payout; 
                     p.lastResult = { won: true, msg: `+ $${payout}` };
                 } else {
                     p.lastResult = { won: false, msg: `- $${p.bet.amount}` };
@@ -234,12 +256,9 @@ io.on('connection', (socket) => {
         room.phase = 'lobby';
         room.round = 0;
         room.players.forEach(p => { 
-            p.balance = 1000; 
-            p.bet = null; 
-            p.lastResult = null; 
-            p.eliminatedAt = null; 
-            p.totalBet = 0; 
-            p.totalWon = 0; 
+            p.balance = 1000; p.bet = null; p.lastResult = null; 
+            p.eliminatedAt = null; p.totalBet = 0; p.totalWon = 0; 
+            p.powerups = { fifty: 1, peek: 1 }; // Refill powerups!
         });
         io.to(roomCode).emit('state', room);
     }
