@@ -54,10 +54,11 @@
   .rank-3 .podium-name { color: #cd7f32; text-shadow: 0 0 10px #cd7f32; }
   .rank-3 .podium-block { height: 150px; background: rgba(205,127,50,0.2); border-color: #cd7f32; box-shadow: 0 -10px 40px rgba(205,127,50,0.3); }
 
-  .host-controls { position: fixed; bottom: 20px; z-index: 100;}
+  .host-controls { position: fixed; bottom: 20px; z-index: 100; display:flex; gap:15px;}
   .btn { font-family: 'Orbitron'; font-weight: 900; font-size: 1.5rem; padding: 15px 40px; border-radius: 50px; border: none; cursor: pointer; text-transform: uppercase; }
   .btn-green { background: var(--green); color: black; box-shadow: var(--glow-green); }
   .btn-gold { background: var(--gold); color: black; box-shadow: var(--glow-gold); }
+  .btn-red { background: #ff2d55; color: black; box-shadow: 0 0 15px #ff2d55; font-size: 1rem;}
   .btn:disabled { background: #333; color: #666; box-shadow: none; cursor: not-allowed; }
 </style>
 </head>
@@ -77,6 +78,7 @@
   <div class="trivia-board" id="triviaBoard">
     <div id="lobbyMsg" style="font-size:2rem; color:var(--cyan); font-family:'Orbitron';">WAITING FOR PLAYERS...</div>
     <div id="qData" style="display:none;">
+      <h3 style="color:var(--gold); margin-bottom:10px;" id="roundDisplay">ROUND 1</h3>
       <div class="question" id="qText"></div>
       <div class="options-grid" id="qOptions"></div>
     </div>
@@ -101,6 +103,13 @@
     document.getElementById('main').style.display = 'flex';
     document.getElementById('roomCode').innerText = code;
   });
+
+  // Global function to start round and send settings
+  window.startRoundWithSettings = function() {
+    const input = document.getElementById('maxRoundsInput');
+    const maxRounds = input ? input.value : 5;
+    socket.emit('startRound', { maxRounds: maxRounds });
+  }
 
   socket.on('state', (state) => {
     const board = document.getElementById('triviaBoard');
@@ -146,15 +155,22 @@
         podiumScreen.style.display = 'none';
     }
 
-    // FIX: Distinctly separate the Lobby view from the Game view
     if(state.phase === 'lobby') {
       lobbyMsg.style.display = 'block'; 
       qData.style.display = 'none'; 
       board.classList.remove('active');
       
-      // If there are players, change text to VIP Lobby instead of "Waiting"
       if (state.players.length > 0) {
-        lobbyMsg.innerHTML = `<div style="font-size:3rem; color:var(--green);">VIP LOBBY</div><div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in. Ready to start!</div>`;
+        // FIX: Add Lobby Settings!
+        let settingsHtml = '';
+        if (state.round === 0) {
+            settingsHtml = `
+            <div style="margin-top:20px; background:rgba(255,255,255,0.05); padding:15px; border-radius:10px; display:inline-block;">
+                <label style="color:var(--gold); font-family:'Orbitron'; font-size:1.2rem;">TOTAL ROUNDS: </label>
+                <input type="number" id="maxRoundsInput" value="5" min="1" max="20" style="font-size:1.2rem; width:60px; text-align:center; background:#111; color:var(--green); border:2px solid var(--green); border-radius:5px; font-family:'Orbitron';">
+            </div>`;
+        }
+        lobbyMsg.innerHTML = `<div style="font-size:3rem; color:var(--green);">VIP LOBBY</div><div style="font-size:1.5rem; color:#888; margin-top:10px;">Players locked in. Ready to start!</div>${settingsHtml}`;
       } else {
         lobbyMsg.innerHTML = `WAITING FOR PLAYERS...`;
       }
@@ -164,6 +180,7 @@
       qData.style.display = 'block'; 
       board.classList.add('active');
       
+      document.getElementById('roundDisplay').innerText = `ROUND ${state.round} OF ${state.maxRounds}`;
       document.getElementById('qText').innerText = state.currentQ.q;
       const qOptions = document.getElementById('qOptions');
       qOptions.innerHTML = '';
@@ -223,19 +240,29 @@
       `;
     });
 
-    if(activePlayerCount === 0) allPlayersBet = false;
-    const isGameOver = state.players.length > 1 ? activePlayerCount <= 1 : activePlayerCount === 0;
+    // FIX: If everyone dies, don't get stuck! Allow the host to reveal the final nail in the coffin.
+    if(activePlayerCount === 0) allPlayersBet = true; 
+
+    // FIX: Trigger Game Over if someone is the last one standing, OR if you hit the max rounds!
+    const isGameOver = (state.players.length > 1 ? activePlayerCount <= 1 : activePlayerCount === 0) || state.round >= state.maxRounds;
 
     const controls = document.getElementById('controls');
+    
+    // Always add the emergency "FORCE END" button just in case
+    let forceEndBtn = '';
+    if (state.phase !== 'lobby' && state.phase !== 'game_over') {
+        forceEndBtn = `<button class="btn btn-red" onclick="socket.emit('endGame')">FORCE END</button>`;
+    }
+
     if(state.phase === 'lobby') {
-      controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')" ${state.players.length === 0 ? 'disabled':''}>START ROUND</button>`;
+      controls.innerHTML = `<button class="btn btn-green" onclick="startRoundWithSettings()" ${state.players.length === 0 ? 'disabled':''}>START ROUND</button>`;
     } else if (state.phase === 'betting') {
-      controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('reveal')" ${!allPlayersBet ? 'disabled':''}>REVEAL ANSWER</button>`;
+      controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('reveal')" ${!allPlayersBet ? 'disabled':''}>REVEAL ANSWER</button>` + forceEndBtn;
     } else if (state.phase === 'results') {
       if (isGameOver) {
           controls.innerHTML = `<button class="btn btn-gold" onclick="socket.emit('endGame')">SHOW PODIUM</button>`;
       } else {
-          controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')">NEXT ROUND</button>`;
+          controls.innerHTML = `<button class="btn btn-green" onclick="socket.emit('startRound')">NEXT ROUND</button>` + forceEndBtn;
       }
     }
   });
